@@ -45,6 +45,16 @@ def test_kpis_ordered_by_priority(con):
     assert [k.display["rank"] for k in m.kpis] == list(range(1, len(m.kpis) + 1))
 
 
+def test_headline_kpis_first(con):
+    m = build_review(con, ReviewParams(account_id="CUST001"))
+    flags = [k.display["headline"] for k in m.kpis]
+    assert flags == sorted(flags, reverse=True)  # headline group first
+    n = sum(flags)
+    assert n == 12 and all(flags[:n])
+    ids = [k.metric_id for k in m.kpis[:12]]
+    assert "co2_saving_kg" in ids and "water_saving_l" in ids
+
+
 def test_customer_audience_hides_internal(con):
     kam = build_review(con, ReviewParams(account_id="CUST001"))
     assert any(k.metric_id == "idle_stock_value_eur" for k in kam.kpis)

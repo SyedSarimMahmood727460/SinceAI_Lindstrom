@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from pptx import Presentation
+from pptx.util import Inches
 
 from api.build import build_review
 from api.review_model import ReviewModel, ReviewParams

@@ -272,21 +272,10 @@ def _exec_summary(prs, review, n):
             _run(tf.paragraphs[0], f"Repairs completed: {fmt_value(r)} {tag(r)}", 13, True, NAVY)
 
 
-# Supporting/intermediate metrics are left to the other slides; headline savings are pinned in.
-SUPPORTING = {"washed_kg", "washing_pct", "active_wearers_avg", "sites", "garments_allocated", "idle_pieces",
-              "baseline_water_l", "baseline_energy_kwh", "baseline_co2_kg", "allocated_water_l",
-              "allocated_energy_kwh", "allocated_co2_kg", "footprint_pct_of_baseline_water",
-              "footprint_pct_of_baseline_energy", "footprint_pct_of_baseline_co2"}
-HEADLINE = ["water_saving_l", "co2_saving_kg"]
-
-
 def _top_kpis(review, n=8):
-    pool = [k for k in _customer_kpis(review) if k.metric_id not in SUPPORTING and k.value is not None]
-    top = pool[:n]
-    pins = [k for k in pool if k.metric_id in HEADLINE and k not in top]
-    if pins:
-        top = top[: n - len(pins)] + pins
-    return top
+    """First n headline KPIs (the review already orders headline-first, then by priority)."""
+    return [k for k in _customer_kpis(review)
+            if k.display.get("headline") and k.value is not None][:n]
 
 
 def _kpi_slide(prs, review, n):
@@ -434,19 +423,19 @@ def _appendix_slide(prs, review, n):
     groups: dict[tuple, list] = {}
     for w in warnings:
         groups.setdefault((w.get("check_id"), w.get("entity_id")), []).append(w)
-    _, tf = _textbox(slide, MARGIN, Inches(1.15), CONTENT_W, Inches(1.3))
+    _, tf = _textbox(slide, MARGIN, Inches(1.15), CONTENT_W, Inches(1.1))
     _heading(tf, f"Data-quality warnings ({len(warnings)})", 15, first=True)
     if not groups:
         _bullets(tf, ["None raised for this selection."], 12, space=2, first=False)
-    for (check, ent), ws in list(groups.items())[:3]:
+    for (check, ent), ws in list(groups.items())[:2]:
         _run(tf.add_paragraph(), clip(f"{check} · {ent} · {len(ws)} month(s): {ws[0].get('detail', '')}", 170), 12)
-    if len(groups) > 3:
-        _run(tf.add_paragraph(), f"+ {len(groups) - 3} more warning group(s)", 12, False, GREY)
-    gaps = dq.get("gaps", [])[:8]
-    rows = [[clip(g["field"], 36), clip(g["future_source"], 52), g["status"], clip(_no_internal(g["note"]), 85)] for g in gaps]
+    if len(groups) > 2:
+        _run(tf.add_paragraph(), f"+ {len(groups) - 2} more warning group(s)", 12, False, GREY)
+    gaps = dq.get("gaps", [])[:7]
+    rows = [[clip(g["field"], 36), clip(g["future_source"], 48), g["status"], clip(_no_internal(g["note"]), 80)] for g in gaps]
     if rows:
-        _table(slide, MARGIN, Inches(2.5), [2.6, 3.4, 0.9, 5.23], rows,
-               ["Field", "Future Lindström source", "Status", "Note"], size=12, row_h=0.5, header_size=12)
+        _table(slide, MARGIN, Inches(2.3), [2.6, 3.4, 0.9, 5.23], rows,
+               ["Field", "Future Lindström source", "Status", "Note"], size=12, row_h=0.46, header_size=12)
 
 
 def build_pptx(review, out_path: Path) -> Path:

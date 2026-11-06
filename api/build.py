@@ -110,10 +110,13 @@ def build_review(con, params: ReviewParams, engine: Engine | None = None,
         obs = [o for o in obs if not any(e[0] in hidden for e in o.evidence)]
     actions = action_rows(obs, account_all, sites_all)
 
-    # KPIs ordered by priority score (stable)
+    # KPIs: headline metrics first, each group ordered by priority score (stable)
     visible = _visible(account_all, aud)
-    ordered = sorted(visible.values(), key=lambda m: -_weight(m.priority_tags, priorities))
-    kpis = [Kpi(**m.model_dump(), display={"rank": i, "module_id": None})
+    headline = {mid for mid, spec in engine.registry.items() if spec.get("headline")}
+    ordered = sorted(visible.values(),
+                     key=lambda m: (m.metric_id not in headline, -_weight(m.priority_tags, priorities)))
+    kpis = [Kpi(**m.model_dump(), display={"rank": i, "module_id": None,
+                                           "headline": m.metric_id in headline})
             for i, m in enumerate(ordered, 1)]
 
     flags = _outlier_flags(sites_all)
