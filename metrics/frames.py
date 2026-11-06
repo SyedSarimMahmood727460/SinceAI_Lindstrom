@@ -74,4 +74,5 @@ def base_frames(con: duckdb.DuckDBPyConnection, account_id: str, months: list[st
         f"select * from org_node where level = 'SITE' and "
         f"{'parent_id' if col == 'customer_id' else 'node_id'} = ? order by node_id",
         [account_id]).df()
-    return {"activity": act, "cycles": cycles, "repairs": repairs, "sites": sites}
+    return {"activity": act, "cycles": cycles, "repairs": repairs, "sites": sites,
+            "months": list(months)}

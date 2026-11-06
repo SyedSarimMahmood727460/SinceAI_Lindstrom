@@ -94,11 +94,54 @@ def test_ratio_rollup_not_mean(con, engine, northstar):
 
 
 def test_dq_warning_propagates(engine):
-    clean = engine.compute("CUST003")["allocated_water_l"]
-    flagged = engine.compute("CUST002")["allocated_water_l"]
-    assert clean.dq_warning is False
-    assert flagged.dq_warning is True
-    assert flagged.confidence != "Medium" and clean.confidence == "Medium"
+    reg = load_yaml("metrics.yaml")["allocated_water_l"]["confidence"]
+    clean = engine.compute("CUST003")
+    flagged = engine.compute("CUST002")
+    assert clean["allocated_water_l"].dq_warning is False
+    assert flagged["allocated_water_l"].dq_warning is True
+    assert reg == "Medium" and flagged["allocated_water_l"].confidence == "Low-Med"
+    assert clean["allocated_water_l"].confidence == reg
+    # counts are not allocation-derived, so they are never flagged
+    for mid in ("washed_kg", "utilisation", "sites", "active_wearers", "repairs"):
+        assert flagged[mid].dq_warning is False
+
+
+def test_snapshot_uses_last_month_of_period(con, engine):
+    from metrics.engine import _values
+
+    months = period_months("2025")
+    frames = base_frames(con, "CUST001", months, None)
+    full = _values(frames, load_assumptions()["baselines"]["B_LOCAL"], 1.0, 1.0)
+    act = frames["activity"]
+    frames["activity"] = act[act.month != "2025-12"]
+    cut = _values(frames, load_assumptions()["baselines"]["B_LOCAL"], 1.0, 1.0)
+    assert cut["active_wearers"] == 0 and cut["garments_allocated"] == 0
+    dec = act[act.month == "2025-12"].groupby("site_id").active_wearers.max().sum()
+    assert cut["active_wearers_avg"] == pytest.approx(
+        (full["active_wearers_avg"] * 12 - dec) / 12)
+
+
+def _stub_frames(prov):
+    import pandas as pd
+
+    act = pd.DataFrame({"method_status": ["CALCULATED"] * len(prov), "provenance": prov,
+                        "load_id": ["x"] * len(prov), "dq_warning": [False] * len(prov)})
+    empty = pd.DataFrame()
+    return {"activity": act, "cycles": empty, "repairs": empty}
+
+
+@pytest.mark.parametrize("prov,expected", [
+    (["APPROVED_REAL", "APPROVED_REAL"], "APPROVED_REAL"),
+    (["APPROVED_REAL", "SYNTHETIC"], "SYNTHETIC"),
+    (["APPROVED_REAL", "PUBLIC_REFERENCE"], "PUBLIC_REFERENCE"),
+])
+def test_provenance_is_weakest_of_inputs(engine, prov, expected):
+    from model.contracts import Scope
+
+    spec = load_yaml("metrics.yaml")["washed_kg"]
+    res = engine._result("washed_kg", spec, Scope(node_id="X", level="ACCOUNT", period="2025"),
+                         _stub_frames(prov), {"activity"}, 1.0, None)
+    assert res.provenance.value == expected
 
 
 def test_empty_filter_returns_none_values(engine):

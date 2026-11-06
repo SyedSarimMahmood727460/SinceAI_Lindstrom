@@ -63,14 +63,16 @@ def _values(frames: dict[str, pd.DataFrame], baseline: dict, factor: float, r: f
     act, cyc, rep = frames["activity"], frames["cycles"], frames["repairs"]
     v: dict[str, float | None] = {}
     if len(act):
-        w = _wearers_by_month(act)
-        last = act[act.month == act.month.max()]
+        months_p = frames["months"]
+        # Snapshots are taken at the last month of the period; missing months count as 0.
+        w = _wearers_by_month(act).reindex(months_p, fill_value=0)
+        last = act[act.month == months_p[-1]]
         idle = (act.allocated_pieces - act.active_assets_scanned).clip(lower=0)
         months = act.month
         v["sites"] = float(act.site_id.nunique())
         v["active_wearers"] = _num(w.iloc[-1])
         v["active_wearers_avg"] = _num(w.mean())
-        v["garments_allocated"] = _sum(last.allocated_pieces)
+        v["garments_allocated"] = _sum(last.allocated_pieces) or 0.0
         v["utilisation"] = _div(_sum(act.active_assets_scanned), _sum(act.allocated_pieces))
         v["idle_pieces"] = _num(idle.groupby(months).sum().mean())
         v["idle_stock_value_eur"] = _num((idle * act.purchase_cost_eur).groupby(months).sum().mean())
@@ -133,6 +135,8 @@ class Engine:
     @staticmethod
     def _subset(frames: dict, site_id: str | None = None, month: str | None = None) -> dict:
         out = dict(frames)
+        if month is not None:
+            out["months"] = [month]
         for key in ("activity", "cycles", "repairs"):
             df = frames[key]
             if site_id is not None:
@@ -162,20 +166,22 @@ class Engine:
 
     def _result(self, mid, spec, scope, frames, used, value, rng) -> MetricResult:
         status = MethodStatus(spec["method_status"])
-        prov = Provenance.SYNTHETIC
+        provs: set[Provenance] = set()
         for f in used:
             df = frames[f]
             for s in df["method_status"].unique() if len(df) else []:
                 status = weakest(status, MethodStatus(s))
             for p in df["provenance"].unique() if len(df) else []:
-                prov = max(prov, Provenance(p), key=_PROV_STRENGTH.index)
+                provs.add(Provenance(p))
+        prov = max(provs, key=_PROV_STRENGTH.index) if provs else Provenance.SYNTHETIC
         load_ids: set[str] = set()
         for t in spec["inputs"]:
             frame, col = FACT_FRAME[t]
             if col and col in frames[frame]:
                 load_ids |= set(frames[frame][col].dropna().unique())
         act = frames["activity"]
-        dq = bool("activity" in used and len(act) and act["dq_warning"].any())
+        allocation_derived = bool({"fact_laundry_month", "fact_waste_month"} & set(spec["inputs"]))
+        dq = bool(allocation_derived and len(act) and act["dq_warning"].any())
         conf = spec["confidence"]
         if dq and conf in CONFIDENCE:
             conf = CONFIDENCE[min(CONFIDENCE.index(conf) + 1, len(CONFIDENCE) - 1)]
