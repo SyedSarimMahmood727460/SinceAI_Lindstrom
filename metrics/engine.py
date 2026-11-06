@@ -211,13 +211,14 @@ class Engine:
         }
 
     def monthly(self, account_id: str, metric_ids: list[str], period: str = "2025",
-                product: str | None = None, site_id: str | None = None) -> dict[str, list[dict]]:
+                product: str | None = None, site_id: str | None = None,
+                baseline_id: str = "B_LOCAL") -> dict[str, list[dict]]:
         unknown = [m for m in metric_ids if m not in self.registry and m not in RAW_SERIES]
         if unknown:
             raise ValueError(f"unknown metric ids: {unknown}")
         months = period_months(period)
         frames = base_frames(self.con, site_id or account_id, months, product)
-        base = self._baseline("B_LOCAL")
+        base = self._baseline(baseline_id)
         out: dict[str, list[dict]] = {m: [] for m in metric_ids}
         for month in months:
             sub = self._subset(frames, month=month)
