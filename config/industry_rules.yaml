@@ -1,0 +1,23 @@
+# Industry defaults and topic mapping (spec sections 9.2, 9.3). Priority keys:
+# water, emissions, cost, circularity, service.
+defaults:
+  "Food & Beverage": [service, water]
+  "Manufacturing": [cost, circularity, service]
+  "Healthcare": [service, emissions]
+topic_map:
+  "Water efficiency": water
+  "Scope 3 evidence": emissions
+  "Cost optimization": cost
+  "Garment utilization": cost
+  "Repair": circularity
+  "Hygiene": service
+  "Service continuity": service
+  "Service reliability": service
+  "Safety": service
+  "Compliance": service
+  "Traceability": service
+# dashboard_emphasis text per industry (Industry_Priorities sheet), shown as the "why this view" note.
+emphasis:
+  "Food & Beverage": "Show service continuity, food-industry garment control and hygiene-related performance. Prioritize water use/savings and washed-kg efficiency. Highlight turnaround, service-request-free days and delivery performance."
+  "Manufacturing": "Highlight unused allocation, garments per wearer and optimization potential. Highlight repairs, postponed replacements and circularity value. Highlight product/service reliability and exception signals."
+  "Healthcare": "Prioritize garment flow, service-cycle completion and traceability. Highlight turnaround and reliable availability. Highlight transparent sources, data quality and reporting boundaries."
