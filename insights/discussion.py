@@ -8,14 +8,19 @@ REPORTING_QUESTION = ("Reporting: do we agree the baseline and approve the data 
 OWNERS = ["KAM + site manager", "Service owner", "Lindström laundry"]
 
 
+def _business(obs: list[Observation]) -> list[Observation]:
+    """R8 is a data caveat, not a business action, so it never feeds discussion or actions."""
+    return [o for o in obs if o.rule_id != "R8"]
+
+
 def discussion_points(obs: list[Observation]) -> list[str]:
-    return [o.action for o in obs[:4]] + [REPORTING_QUESTION]
+    return [o.action for o in _business(obs)[:4]] + [REPORTING_QUESTION]
 
 
 def action_rows(obs: list[Observation], account_metrics: dict[str, MetricResult],
                 site_metrics: dict[str, dict[str, MetricResult]]) -> list[dict]:
     rows = []
-    for o, owner in zip(obs[:3], OWNERS):
+    for o, owner in zip(_business(obs)[:3], OWNERS):
         metric_id, node = o.evidence[0]
         pool = site_metrics.get(node) or account_metrics
         m = pool.get(metric_id)

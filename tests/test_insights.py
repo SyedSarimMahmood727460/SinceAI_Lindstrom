@@ -84,8 +84,19 @@ def test_rules_need_three_sites(inputs):
 
 
 def test_priority_changes_order(inputs):
-    assert "cost" in _obs(inputs, "CUST001", ["cost"])[0].tags
-    assert "service" in _obs(inputs, "CUST001", ["service"])[0].tags
+    cost, service = _obs(inputs, "CUST001", ["cost"]), _obs(inputs, "CUST001", ["service"])
+    assert "cost" in cost[0].tags and "service" in service[0].tags
+    assert [o.id for o in cost] != [o.id for o in service]
+
+
+def test_r8_sorts_last_and_is_not_actioned(inputs):
+    d = inputs["CUST001"]
+    obs = _obs(inputs, "CUST001")
+    assert obs[-1].rule_id == "R8" and obs[0].rule_id != "R8"
+    r8 = obs[-1]
+    assert r8.action not in discussion_points(obs)
+    rows = action_rows(obs, d["account_metrics"], d["site_metrics"])
+    assert all(r["text"] != r8.action for r in rows)
 
 
 def test_discussion_points_five(inputs):

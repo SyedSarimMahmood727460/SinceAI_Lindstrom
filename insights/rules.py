@@ -95,12 +95,13 @@ def build_observations(account_id: str, account_metrics: dict[str, MetricResult]
         hi = max(rated, key=lambda x: x["recycling_rate"])
         lo = min(rated, key=lambda x: x["recycling_rate"])
         gap = hi["recycling_rate"] - lo["recycling_rate"]
-        if gap >= 0.10:
+        rec = account_metrics.get("recycling_rate")
+        if gap >= 0.10 and rec is not None:
             add("R4", account_id, f"Recycling gap between laundries: {lo['name']} is lowest",
                 f"{lo['name']} recycles {lo['recycling_rate']:.0%} of textile waste against "
                 f"{hi['recycling_rate']:.0%} at {hi['name']}, a gap of {gap * 100:.0f} percentage points.",
                 "Ask for the laundry roadmap and agree a joint recycling KPI.", ["circularity"],
-                [("recycling_rate", account_id)], [account_metrics["recycling_rate"]])
+                [("recycling_rate", account_id)], [rec])
 
     site_rule("R5", "repairs_per_100w", "max", ["circularity", "cost"],
               lambda n: f"High repair intensity at {n}",
@@ -131,15 +132,17 @@ def build_observations(account_id: str, account_metrics: dict[str, MetricResult]
     # R8: data consistency
     flagged = [m for m in account_metrics.values() if m.dq_warning]
     laundries = [x for x in laundry_stats if x.get("dq_warning")]
-    if flagged or laundries:
-        ev = [(m.metric_id, account_id) for m in flagged] or [("recycling_rate", account_id)]
-        metrics = flagged or [account_metrics["recycling_rate"]]
+    fallback = [account_metrics["recycling_rate"]] if "recycling_rate" in account_metrics else []
+    metrics = flagged or fallback
+    if (flagged or laundries) and metrics:
+        ev = [(m.metric_id, account_id) for m in metrics]
         names = ", ".join(x["name"] for x in laundries) or "a serving laundry"
         add("R8", account_id, "Laundry volume data needs confirmation",
             f"Data from {names} carries a consistency warning, so allocated water, energy, CO2e "
             "and waste figures for this account are less certain.",
             "Ask Lindström to confirm the laundry volume data before using the figures externally.",
             ALL_TAGS, ev, metrics, confidence="Low")
+        obs[-1].score = -1.0  # controller ruling: data-consistency caveat is not prioritised; sorts last
 
     obs.sort(key=lambda o: (-o.score, -abs(o.z or 0.0)))
     return obs
