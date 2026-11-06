@@ -25,9 +25,10 @@ MIN_SITES = 3
 
 
 def _narrate(review: ReviewModel, use_llm: bool) -> Narrative:
-    """Hook for Task 9: replace the body with `return ai.narrator.narrate(review, use_llm)`."""
-    return Narrative(exec_summary="", discussion_points=discussion_points(review.observations),
-                     generated_by="template")
+    """LLM narrative when enabled (VR_AI, API key), else the template; always guard-checked."""
+    from ai import llm
+    from ai.narrator import narrate
+    return narrate(review, use_llm and llm.use_llm())
 
 
 def _select(m: MetricResult, sensitivity: str) -> MetricResult:

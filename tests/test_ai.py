@@ -1,0 +1,176 @@
+import json
+from types import SimpleNamespace
+
+import pytest
+
+from ai import intent, llm, narrator
+from ai.guard import check, render
+from ai.templates import placeholder_values, template_narrative, wording_rules
+from api.build import build_review
+from api.review_model import ReviewParams
+
+ACCOUNTS = [{"node_id": "CUST001", "name": "NorthStar Foods Group"},
+            {"node_id": "CUST002", "name": "Apex Manufacturing"},
+            {"node_id": "CUST003", "name": "Mediora Health"}]
+BASELINES = {"B_LOCAL": {"name": "Outsourced local laundry"}, "B_HOME": {"name": "Home washing"},
+             "B_INHOUSE": {"name": "In-house customer laundry"}}
+BANNED = ["carbon neutral", "net zero", "CSRD-compliant", "audited", "verified", "guaranteed"]
+
+
+@pytest.fixture(scope="module")
+def review(con):
+    return build_review(con, ReviewParams(account_id="CUST001"))
+
+
+class FakeClient:
+    def __init__(self, *outputs):
+        self.outputs, self.calls = list(outputs), []
+        self.messages = SimpleNamespace(create=self.create)
+
+    def create(self, **kw):
+        self.calls.append(kw)
+        out = self.outputs.pop(0)
+        if isinstance(out, Exception):
+            raise out
+        return SimpleNamespace(content=out if isinstance(out, list)
+                               else [SimpleNamespace(type="text", text=out)])
+
+
+def _good(review):
+    oid = review.observations[0].id
+    return json.dumps({
+        "exec_summary": "{{account.name}} avoided {{co2_saving_kg.base}} vs {{baseline.name}} "
+                        "(estimate). Priority: {{obs:%s}}." % oid,
+        "discussion_points": ["Discuss {{obs:%s}}." % oid] * 5})
+
+
+# --- guard ---
+def test_guard_rejects_digits():
+    assert check("Saved 255 t", set(), [])
+    assert not check("Saved {{co2_saving_kg.base}}", {"co2_saving_kg.base"}, [])
+
+
+def test_guard_rejects_banned():
+    assert check("We are Carbon Neutral", set(), BANNED)
+
+
+def test_guard_rejects_unknown_placeholder():
+    assert check("{{made_up}}", {"x"}, [])
+
+
+def test_wording_rules_file():
+    assert wording_rules()["banned"] == BANNED
+
+
+def test_render():
+    assert render("A {{k}} B {{z}}", {"k": "1 t"}) == "A 1 t B {{z}}"
+
+
+# --- templates / narrator ---
+def test_template_narrative_contains_real_numbers(review):
+    n = template_narrative(review)
+    vals = placeholder_values(review)
+    assert vals["co2_saving_kg.base"] in n.exec_summary
+    assert n.generated_by == "template" and "{{" not in n.exec_summary
+    assert len(n.exec_summary.split()) <= 120 and len(n.discussion_points) == 5
+    assert not [v for v in check(n.exec_summary, set(), BANNED) if v.startswith("banned")]
+
+
+def test_narrate_falls_back_without_key(monkeypatch, review):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("VR_AI", "on")
+    assert llm.use_llm() is False
+    assert narrator.narrate(review, llm.use_llm()).generated_by == "template"
+
+    def boom():
+        raise RuntimeError("no key")
+    monkeypatch.setattr(llm, "get_client", boom)
+    assert narrator.narrate(review, True).generated_by == "template"
+
+
+def test_narrate_uses_llm_when_guard_passes(monkeypatch, review, tmp_path):
+    fake = FakeClient(_good(review))
+    monkeypatch.setattr(llm, "get_client", lambda: fake)
+    n = narrator.narrate(review, True)
+    assert n.generated_by == "llm" and "{{" not in n.exec_summary
+    assert placeholder_values(review)["co2_saving_kg.base"] in n.exec_summary
+    assert fake.calls[0]["model"] == "claude-sonnet-5-5" and fake.calls[0]["timeout"] <= 15
+    assert "255" not in fake.calls[0]["messages"][0]["content"]  # no computed numbers sent
+    logged = json.loads((tmp_path / "logs" / f"{review.meta.run_id}.json").read_text("utf-8"))
+    assert logged["generated_by"] == "llm"
+
+
+def test_narrate_retries_once_then_accepts(monkeypatch, review):
+    fake = FakeClient("Saved 999 t", _good(review))
+    monkeypatch.setattr(llm, "get_client", lambda: fake)
+    assert narrator.narrate(review, True).generated_by == "llm" and len(fake.calls) == 2
+
+
+def test_narrate_rejects_llm_digits(monkeypatch, review):
+    fake = FakeClient("Saved 999 t", "Saved 999 t")
+    monkeypatch.setattr(llm, "get_client", lambda: fake)
+    n = narrator.narrate(review, True)
+    assert n.generated_by == "template" and "999" not in n.exec_summary and len(fake.calls) == 2
+
+
+def test_narrate_rejects_banned_and_bad_count(monkeypatch, review):
+    bad = json.dumps({"exec_summary": "We are carbon neutral.", "discussion_points": ["a"] * 5})
+    few = json.dumps({"exec_summary": "Fine.", "discussion_points": ["a"] * 3})
+    monkeypatch.setattr(llm, "get_client", lambda: FakeClient(bad, few))
+    assert narrator.narrate(review, True).generated_by == "template"
+
+
+def test_no_log_without_llm(review, tmp_path):
+    narrator.narrate(review, False)
+    assert not (tmp_path / "logs").exists()
+
+
+# --- intent ---
+def test_intent_keywords():
+    v = intent.keyword_intent("Focus on water and emissions, compare with home washing",
+                              ACCOUNTS, BASELINES)
+    assert v.priorities == ["water", "emissions"]
+    assert v.baseline_id == "B_HOME" and v.view == "footprint"
+    assert v.interpretation_text.startswith("Understood")
+
+
+def test_intent_customer():
+    v = intent.keyword_intent("Prepare five discussion points for Apex", ACCOUNTS, BASELINES)
+    assert v.node_id == "CUST002" and v.view == "steering"
+
+
+def test_intent_allocation_is_not_local_baseline():
+    v = intent.keyword_intent("cost allocation", ACCOUNTS, BASELINES)
+    assert v.priorities == ["cost"] and v.baseline_id is None
+
+
+def test_intent_unrecognised():
+    v = intent.keyword_intent("hello there", ACCOUNTS, BASELINES)
+    assert v.priorities == [] and v.view is None and v.node_id is None
+    assert v.interpretation_text.startswith("Not recognised")
+
+
+def _tool_use(**inp):
+    return [SimpleNamespace(type="tool_use", name="set_view", input=inp)]
+
+
+def test_parse_intent_llm_drops_unknown_ids(monkeypatch):
+    fake = FakeClient(_tool_use(node_id="CUST999", priorities=["water", "luck"],
+                                baseline_id="B_X", view="steering"))
+    monkeypatch.setattr(llm, "get_client", lambda: fake)
+    v = intent.parse_intent("water please", ACCOUNTS, BASELINES, True)
+    assert v.node_id is None and v.priorities == ["water"] and v.baseline_id is None
+    assert v.view == "steering" and fake.calls[0]["tool_choice"]["name"] == "set_view"
+
+
+def test_parse_intent_llm_nothing_recognised(monkeypatch):
+    monkeypatch.setattr(llm, "get_client", lambda: FakeClient(_tool_use(node_id="X")))
+    assert intent.parse_intent("zzz", ACCOUNTS, BASELINES, True) \
+        .interpretation_text.startswith("Not recognised")
+
+
+def test_parse_intent_falls_back_on_error(monkeypatch):
+    monkeypatch.setattr(llm, "get_client", lambda: FakeClient(TimeoutError("slow")))
+    v = intent.parse_intent("focus on water", ACCOUNTS, BASELINES, True)
+    assert v.priorities == ["water"]
+    assert intent.parse_intent("focus on water", ACCOUNTS, BASELINES, False).priorities == ["water"]

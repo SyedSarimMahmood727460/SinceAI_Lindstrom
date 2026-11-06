@@ -68,7 +68,7 @@ def _review(params: ReviewParams):
         if params.baseline_id not in state.engine.assumptions["baselines"]:
             raise HTTPException(422, f"unknown baseline: {params.baseline_id}")
         try:
-            return build_review(state.con, params, engine=state.engine)
+            return build_review(state.con, params, engine=state.engine, use_ai=True)
         except ValueError as e:  # unknown site / baseline etc.
             raise HTTPException(422, str(e))
 
@@ -86,12 +86,12 @@ def accounts():
 @app.get("/accounts/{account_id}/review")
 def review(account_id: str, period: str = "2025", product: str | None = None,
            baseline: str = "B_LOCAL", sens: str = "base", priorities: str | None = None,
-           site: str | None = None, audience: str = "kam"):
+           site: str | None = None, audience: str = "kam", hint: str | None = None):
     chips = [p.strip() for p in priorities.split(",") if p.strip()] if priorities else None
     try:
         params = ReviewParams(account_id=account_id, period=period, product=product,
                               baseline_id=baseline, sensitivity=sens, priorities=chips,
-                              priority_source_hint="chips" if chips else None,
+                              priority_source_hint=(hint if hint else "chips") if chips else None,
                               site=site, audience=audience)
     except ValueError as e:
         raise HTTPException(422, str(e))
@@ -104,15 +104,12 @@ class IntentRequest(BaseModel):
 
 
 def _parse_intent(text: str) -> ViewSpec:
-    """Hook for Task 9: uses ai.intent.keyword_intent when importable."""
-    try:
-        from ai.intent import keyword_intent
-    except ModuleNotFoundError as e:
-        if e.name not in ("ai.intent", "ai"):
-            raise
-        return ViewSpec(interpretation_text="Not recognised")
+    from ai import llm
+    from ai.intent import parse_intent
     with state.lock:
-        return keyword_intent(text, state.con)
+        accounts = [{"node_id": r[0], "name": r[1]} for r in state.con.execute(
+            "select node_id, name from org_node where level = 'ACCOUNT' order by node_id").fetchall()]
+    return parse_intent(text, accounts, state.engine.assumptions["baselines"], llm.use_llm())
 
 
 @app.post("/intent")

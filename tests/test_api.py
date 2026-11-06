@@ -116,3 +116,17 @@ def test_export_unknown_site(client):
     assert r.status_code == 422
     r = client.post("/reviews/export", json={"account_id": "CUST001", "sensitivity": "zzz"})
     assert r.status_code in (400, 422)
+
+
+def test_review_hint_prompt(client):
+    r = client.get("/accounts/CUST001/review", params={"priorities": "water", "hint": "prompt"})
+    assert r.status_code == 200 and r.json()["context"]["priority_source"] == "prompt"
+    assert client.get("/accounts/CUST001/review",
+                      params={"priorities": "water", "hint": "bogus"}).status_code == 422
+
+
+def test_intent_endpoint_keywords(client):
+    r = client.post("/intent", json={"text": "Prepare five discussion points for Apex"})
+    assert r.json()["node_id"] == "CUST002" and r.json()["view"] == "steering"
+    assert client.post("/intent", json={"text": "hello there"}).json()[
+        "interpretation_text"].startswith("Not recognised")

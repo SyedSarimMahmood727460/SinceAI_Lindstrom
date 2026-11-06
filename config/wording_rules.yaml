@@ -1,0 +1,9 @@
+# Wording rules for generated text (spec 10.4). Matching is case-insensitive.
+banned:
+  - carbon neutral
+  - net zero
+  - CSRD-compliant
+  - audited
+  - verified
+  - guaranteed
+caveat: '"saved" or "avoided" must be followed by "vs {baseline} (estimate)"'
