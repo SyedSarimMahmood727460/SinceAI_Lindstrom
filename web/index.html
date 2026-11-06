@@ -1,3 +1,56 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Value Review</title></head>
-<body><p>Prototype · synthetic data · not audited</p></body></html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Value Review – Customer Value &amp; Sustainability (prototype)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/web/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<header>
+  <div class="logo"><i></i>Lindström <small>· Customer Value &amp; Sustainability Review</small></div>
+  <div class="toolbar">
+    <span class="loading" id="loading">Loading…</span>
+    <label class="ctl">Customer<select id="cust"></select></label>
+    <label class="ctl">Period<select id="period">
+      <option value="2025">2025 (Jan–Dec)</option>
+      <option value="2025-Q1">2025 Q1</option>
+      <option value="2025-Q2">2025 Q2</option>
+      <option value="2025-Q3">2025 Q3</option>
+      <option value="2025-Q4">2025 Q4</option>
+    </select></label>
+    <label class="ctl">Product<select id="product"><option value="">All products</option></select></label>
+    <label class="ctl">Comparison baseline<select id="base"></select></label>
+    <label class="ctl">Sensitivity<select id="sens"><option value="low">Low</option><option value="base" selected>Base</option><option value="high">High</option></select></label>
+    <div class="ctl">Audience<div class="seg" id="aud"><button data-aud="kam" class="on">KAM</button><button data-aud="customer">Customer</button></div></div>
+    <button class="btn" id="exportBtn">Export review (PPTX)</button>
+  </div>
+</header>
+<div class="wrap">
+<nav id="nav">
+  <div class="sub">Review</div>
+  <a data-v="overview" class="on">Overview</a>
+  <a data-v="sites">Sites &amp; drill-down</a>
+  <a data-v="footprint">Footprint &amp; handprint</a>
+  <a data-v="circularity">Circularity &amp; repairs</a>
+  <a data-v="steering">Steering committee</a>
+  <div class="sub">Trust</div>
+  <a data-v="methodology">Methodology &amp; assumptions</a>
+  <a data-v="readiness">Data readiness</a>
+</nav>
+<main id="main">
+  <div class="banner">⚠ <b id="disclaimer">Prototype · synthetic data · not audited</b> · Lindström × Since AI 2026 data pack. Values are illustrative and are not Lindström or customer claims. Every figure carries a status badge. Click any tile to see how it's calculated.</div>
+  <div class="prompt">🔎 <input id="q" type="text" placeholder="State a priority… e.g. “Focus on water and emissions” or “Compare our circular service with home washing”"><button class="btn" id="qBtn">Tailor view</button></div>
+  <div class="chips" id="pchips"></div>
+  <div class="interp" id="interp"></div>
+  <div id="pageHead"></div>
+  <div id="page" class="mods"></div>
+</main>
+</div>
+<div class="drawer" id="drawer"><span class="x" id="drawerX">✕</span><div id="drawerBody"></div></div>
+<div class="toast" id="toast"></div>
+<script src="/web/modules.js"></script>
+<script src="/web/app.js"></script>
+</body>
+</html>
