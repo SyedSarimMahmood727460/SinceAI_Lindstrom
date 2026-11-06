@@ -1,0 +1,28 @@
+# Static review text: methodology boundary, limitations, status legend, data-readiness gaps (spec 14).
+boundary:
+  - "Scope: Lindström textile rental service delivered to the selected customer account and its sites."
+  - "Footprint: laundry water, process energy and CO2e allocated to the customer by washed kg (A003); delivery CO2e included."
+  - "Baseline: the selected alternative (default outsourced local laundry), applied to the same washed kg."
+  - "Handprint: repairs completed and replacements they may postpone, shown separately and never added to washing savings."
+  - "Excluded: product manufacturing footprint in the washing saving, customer commuting, end-of-life beyond the waste routes in the pack."
+limitations:
+  - "All figures are synthetic and illustrative; baseline factors are placeholders until approved."
+  - "Estimated savings are small differences between two large numbers, so ranges are wide (water especially)."
+  - "Repair savings assume 1 completed repair postpones up to 1 replacement (A002 is an upper bound; the range starts at 0.25)."
+  - "Wearers are de-duplicated as the maximum across products per site-month and summed over sites (T2)."
+  - "Laundry L003 reports far less washed kg than the customer kg routed to it, so allocation per kg is shown with a data warning."
+  - "Not audited and not suitable for CSRD or other regulatory reporting."
+status_legend:
+  - {status: MEASURED, meaning: "Read directly from a source system."}
+  - {status: CALCULATED, meaning: "Derived arithmetically from measured data."}
+  - {status: ALLOCATED, meaning: "Shared laundry data allocated to the customer by washed kg."}
+  - {status: ESTIMATED, meaning: "Depends on an assumption, baseline or sensitivity; shown with a low/base/high range."}
+gaps:
+  - {field: "Wearers per site", future_source: "eLindström user and garment assignment", status: "Gap", note: "Pack gives monthly counts only; de-duplication across products is assumed (T2)."}
+  - {field: "Garment scans (utilisation)", future_source: "RFID and scan events", status: "Partial", note: "Meaning of the allocation-versus-scanned gap is unconfirmed."}
+  - {field: "Laundry water, energy and CO2e", future_source: "Laundry process metering (Tier 1 BI export)", status: "Partial", note: "Monthly laundry totals; L003 volume is inconsistent with customer kg."}
+  - {field: "Delivery on-time flag", future_source: "Route and delivery system", status: "Partial", note: "LATE definition used as supplied."}
+  - {field: "Repairs and replacements", future_source: "Repair workshop system and order history", status: "Gap", note: "Postponed replacements are an assumption, not an observed outcome."}
+  - {field: "Textile waste routes", future_source: "Laundry waste reporting", status: "Partial", note: "Attributed to the customer by washed kg share."}
+  - {field: "Baseline factors", future_source: "Approved public or customer-specific emission factors", status: "Gap", note: "Illustrative values; need approval before external use."}
+  - {field: "Product cost and footprint", future_source: "Product master data and LCA", status: "Gap", note: "Synthetic; idle stock value is internal only."}
