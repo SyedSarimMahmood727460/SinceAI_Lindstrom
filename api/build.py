@@ -74,6 +74,12 @@ def build_review(con, params: ReviewParams, engine: Engine | None = None,
         raise ValueError(f"unknown account: {acc}")
     name, industry, segment, topics = row
     assumptions = engine.assumptions
+    if params.baseline_id not in assumptions["baselines"]:
+        raise ValueError(f"unknown baseline_id: {params.baseline_id}")
+    if params.site is not None and params.site not in {
+            r[0] for r in con.execute("select node_id from org_node where level = 'SITE' "
+                                      "and parent_id = ?", [acc]).fetchall()}:
+        raise ValueError(f"unknown site: {params.site}")
     baseline = assumptions["baselines"][params.baseline_id]
 
     # priorities
@@ -81,7 +87,7 @@ def build_review(con, params: ReviewParams, engine: Engine | None = None,
     chosen = params.priorities or None
     priorities, source = resolve_priorities(
         list(topics or []), industry,
-        chips=chosen if chosen and hint == "chips" else None,
+        chips=chosen if chosen and hint != "prompt" else None,
         prompt=chosen if chosen and hint == "prompt" else None)
 
     # metrics (the selected sensitivity picks every headline value)

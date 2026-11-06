@@ -105,3 +105,25 @@ def test_review_sections(con):
     assert m.data_quality["gaps"] and m.data_quality["hidden_modules"] == []
     assert m.data_quality["warnings"] and m.data_quality["quarantine_count"] >= 0
     json.loads(m.model_dump_json())
+
+
+def test_priorities_without_hint_are_chips(con):
+    m = build_review(con, ReviewParams(account_id="CUST001", priorities=["cost"]))
+    assert m.context.active_priorities[0] == "cost" and m.context.priority_source == "chips"
+
+
+def test_unknown_baseline_or_site_raises_value_error(con):
+    with pytest.raises(ValueError, match="unknown baseline_id: B_X"):
+        build_review(con, ReviewParams(account_id="CUST001", baseline_id="B_X"))
+    with pytest.raises(ValueError, match="unknown site: S999"):
+        build_review(con, ReviewParams(account_id="CUST001", site="S999"))
+
+
+def test_customer_audience_observations_and_actions_clean(con):
+    for acc in ACCOUNTS:
+        m = build_review(con, ReviewParams(account_id=acc, audience="customer",
+                                           priorities=["cost"]))
+        assert all(e[0] != "idle_stock_value_eur" for o in m.observations for e in o.evidence)
+        hidden = {k.metric_id for k in build_review(con, ReviewParams(account_id=acc)).kpis
+                  if not k.customer_facing}
+        assert hidden and all(a["kpi_metric_id"] not in hidden for a in m.actions)
