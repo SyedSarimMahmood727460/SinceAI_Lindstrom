@@ -86,9 +86,13 @@ def test_intent_hook(client):
     assert "interpretation_text" in r.json()
 
 
-def test_export_not_wired(client):
+def test_export_pptx(client):
     r = client.post("/reviews/export", json={"account_id": "CUST001", "format": "pptx"})
-    assert r.status_code == 501
+    assert r.status_code == 200
+    assert r.headers["content-type"] == (
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation")
+    assert "review_CUST001_2025.pptx" in r.headers["content-disposition"]
+    assert r.content[:2] == b"PK"
 
 
 def test_root_serves_html(client):

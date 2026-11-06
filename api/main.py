@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -141,8 +142,9 @@ class ExportRequest(ReviewParams):
 
 
 def _build_pptx(review_model) -> bytes | None:
-    """Hook for Task 8: return `export.pptx_builder.build_pptx(review_model)` bytes."""
-    return None
+    from export.pptx_builder import build_pptx
+    with tempfile.TemporaryDirectory(prefix="vr_pptx_") as tmp:
+        return build_pptx(review_model, Path(tmp) / "review.pptx").read_bytes()
 
 
 @app.post("/reviews/export")
@@ -157,7 +159,7 @@ def export(req: ExportRequest):
     if data is None:
         raise HTTPException(501, "PPTX export is not available yet")
     return Response(data, media_type=PPTX_MIME, headers={
-        "Content-Disposition": f'attachment; filename="value-review-{params.account_id}.pptx"'})
+        "Content-Disposition": f'attachment; filename="review_{params.account_id}_{params.period}.pptx"'})
 
 
 @app.get("/data-quality")
