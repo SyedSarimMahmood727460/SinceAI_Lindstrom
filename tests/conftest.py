@@ -16,3 +16,10 @@ def pack_path() -> Path:
     if not path.exists():
         pytest.skip(f"data pack not found: {path}")
     return path
+
+
+@pytest.fixture(scope="session")
+def con(pack_path):
+    from model.load import load_pack
+
+    return load_pack(pack_path)

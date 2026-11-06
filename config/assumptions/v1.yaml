@@ -1,0 +1,90 @@
+version: v1
+baselines:
+  B_LOCAL:
+    name: Outsourced local laundry
+    water_l_per_kg: 9.5
+    energy_kwh_per_kg: 1.05
+    process_kgco2e_per_kg: 0.62
+    delivery_kgco2e_per_kg: 0.035
+    mixed_waste_share: 1.0
+    note: No systematic repair; textile waste assumed mixed waste. Values illustrative.
+    default: true
+  B_HOME:
+    name: Home washing
+    water_l_per_kg: 20.0
+    energy_kwh_per_kg: 1.18
+    process_kgco2e_per_kg: 0.78
+    delivery_kgco2e_per_kg: 0.0
+    mixed_waste_share: 1.0
+    note: 53% load-utilization concept; no centralized delivery; no systematic repair. Values illustrative.
+    default: false
+  B_INHOUSE:
+    name: In-house customer laundry
+    water_l_per_kg: 12.5
+    energy_kwh_per_kg: 1.12
+    process_kgco2e_per_kg: 0.68
+    delivery_kgco2e_per_kg: 0.015
+    mixed_waste_share: 1.0
+    note: Customer-operated laundry scenario; no systematic repair. Values illustrative.
+    default: false
+sensitivity:
+  low:
+    baseline_factor: 0.85
+    replacements_per_repair: 0.25
+  base:
+    baseline_factor: 1.0
+    replacements_per_repair: 1.0
+  high:
+    baseline_factor: 1.15
+    replacements_per_repair: 1.0
+register:
+- id: A001
+  assumption: Default comparison baseline
+  value_or_rule: Outsourced local laundry
+  confidence: Medium
+  treatment: Editable
+- id: A002
+  assumption: Repair handprint
+  value_or_rule: 1 completed repair postpones 1 replacement event
+  confidence: Low-Medium
+  treatment: Sensitivity-test
+- id: A003
+  assumption: Waste attribution
+  value_or_rule: Laundry waste allocated by customer share of washed kg
+  confidence: Medium
+  treatment: Required disclosure
+- id: A004
+  assumption: Waste baseline
+  value_or_rule: 100% mixed-waste treatment in baseline
+  confidence: Low-Medium
+  treatment: Editable
+- id: A005
+  assumption: Product footprint
+  value_or_rule: Synthetic kgCO2e values by product
+  confidence: Low
+  treatment: Replace for production
+- id: A006
+  assumption: Customer hierarchy
+  value_or_rule: Synthetic parent customer/site hierarchy
+  confidence: High
+  treatment: Prototype
+- id: A007
+  assumption: Industry emphasis
+  value_or_rule: Rules use customer industry and stated priority
+  confidence: Medium
+  treatment: Review
+- id: A008
+  assumption: Data status
+  value_or_rule: Every output retains source/status label
+  confidence: High
+  treatment: Mandatory
+- id: T1
+  assumption: Sensitivity range (team)
+  value_or_rule: Baseline factors ×0.85/×1.0/×1.15; replacements per repair 0.25/1.0/1.0
+  confidence: Medium
+  treatment: Editable
+- id: T2
+  assumption: Wearer de-duplication (team)
+  value_or_rule: max(active_wearers) across product rows per site-month
+  confidence: Medium
+  treatment: Confirm with data owner
