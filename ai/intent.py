@@ -115,6 +115,8 @@ def _llm_intent(text: str, accounts: list[dict], baselines: dict) -> ViewSpec:
         tools=[_tool(accounts, baselines)], tool_choice={"type": "tool", "name": TOOL_NAME})
     block = next(b for b in resp.content
                  if getattr(b, "type", "") == "tool_use" and b.name == TOOL_NAME)
+    if not block.input:
+        raise ValueError("empty tool input")  # parse_intent falls back to the keyword matcher
     return _interpretation(text, _validated(dict(block.input), accounts, baselines),
                            accounts, baselines)
 

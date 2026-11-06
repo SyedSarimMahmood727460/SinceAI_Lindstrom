@@ -6,4 +6,55 @@ banned:
   - audited
   - verified
   - guaranteed
+# Numerals that are part of a name, not a figure; the guard ignores these before its digit check.
+allowed_numerals:
+  - CO2e
+  - CO₂e
+  - CO2
+  - CO₂
+  - Scope 1
+  - Scope 2
+  - Scope 3
+# Number words are figures in disguise; generated text must use placeholders instead.
+number_words:
+  - zero
+  - one
+  - two
+  - three
+  - four
+  - five
+  - six
+  - seven
+  - eight
+  - nine
+  - ten
+  - eleven
+  - twelve
+  - thirteen
+  - fourteen
+  - fifteen
+  - sixteen
+  - seventeen
+  - eighteen
+  - nineteen
+  - twenty
+  - thirty
+  - forty
+  - fifty
+  - sixty
+  - seventy
+  - eighty
+  - ninety
+  - hundred
+  - thousand
+  - million
+  - half
+  - halved
+  - double
+  - doubled
+  - twice
+  - triple
+  - tripled
+  - percent
+  - quarter of
 caveat: '"saved" or "avoided" must be followed by "vs {baseline} (estimate)"'

@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from api import build as build_mod
 from ai import intent, llm, narrator
 from ai.guard import check, render
 from ai.templates import placeholder_values, template_narrative, wording_rules
@@ -39,7 +40,7 @@ class FakeClient:
 def _good(review):
     oid = review.observations[0].id
     return json.dumps({
-        "exec_summary": "{{account.name}} avoided {{co2_saving_kg.base}} vs {{baseline.name}} "
+        "exec_summary": "{{account.name}} avoided {{co2_saving_kg.value}} vs {{baseline.name}} "
                         "(estimate). Priority: {{obs:%s}}." % oid,
         "discussion_points": ["Discuss {{obs:%s}}." % oid] * 5})
 
@@ -70,7 +71,7 @@ def test_render():
 def test_template_narrative_contains_real_numbers(review):
     n = template_narrative(review)
     vals = placeholder_values(review)
-    assert vals["co2_saving_kg.base"] in n.exec_summary
+    assert vals["co2_saving_kg.value"] in n.exec_summary
     assert n.generated_by == "template" and "{{" not in n.exec_summary
     assert len(n.exec_summary.split()) <= 120 and len(n.discussion_points) == 5
     assert not [v for v in check(n.exec_summary, set(), BANNED) if v.startswith("banned")]
@@ -93,7 +94,7 @@ def test_narrate_uses_llm_when_guard_passes(monkeypatch, review, tmp_path):
     monkeypatch.setattr(llm, "get_client", lambda: fake)
     n = narrator.narrate(review, True)
     assert n.generated_by == "llm" and "{{" not in n.exec_summary
-    assert placeholder_values(review)["co2_saving_kg.base"] in n.exec_summary
+    assert placeholder_values(review)["co2_saving_kg.value"] in n.exec_summary
     assert fake.calls[0]["model"] == "claude-sonnet-5-5" and fake.calls[0]["timeout"] <= 15
     assert "255" not in fake.calls[0]["messages"][0]["content"]  # no computed numbers sent
     logged = json.loads((tmp_path / "logs" / f"{review.meta.run_id}.json").read_text("utf-8"))
@@ -174,3 +175,65 @@ def test_parse_intent_falls_back_on_error(monkeypatch):
     v = intent.parse_intent("focus on water", ACCOUNTS, BASELINES, True)
     assert v.priorities == ["water"]
     assert intent.parse_intent("focus on water", ACCOUNTS, BASELINES, False).priorities == ["water"]
+
+
+# --- fix round 1 ---
+def test_guard_allows_named_numerals():
+    ok = {"baseline.name"}
+    assert not check("CO2 savings vs {{baseline.name}}", ok, BANNED)
+    assert not check("CO₂e and co2e, Scope 3 evidence", ok, BANNED)
+    assert check("saved 3 t", ok, BANNED)
+    assert check("Scope 4 evidence", ok, BANNED)
+
+
+def test_guard_rejects_number_words():
+    assert check("emissions halved", set(), BANNED)
+    assert check("three sites", set(), BANNED)
+    assert check("A Quarter of sites", set(), BANNED)
+    assert not check("alone, someone, phone and ones", set(), BANNED)
+
+
+def test_strip_digits_keeps_co2():
+    assert narrator._strip_digits("CO2 up 12 at Scope 3 site") == "CO2 up  at Scope 3 site".replace("  ", " ")
+
+
+def test_retry_feeds_violations_back(monkeypatch, review):
+    bad = json.dumps({"exec_summary": "Saved 999 t", "discussion_points": ["a"] * 5})
+    fake = FakeClient(bad, _good(review))
+    monkeypatch.setattr(llm, "get_client", lambda: fake)
+    narrator.narrate(review, True)
+    first, second = fake.calls[0]["messages"], fake.calls[1]["messages"]
+    assert len(first) == 1 and len(second) == 3
+    assert second[1] == {"role": "assistant", "content": bad}
+    assert "digits outside placeholders" in second[2]["content"]
+
+
+def test_llm_narrative_cached_per_run_id(monkeypatch, con):
+    build_mod._NARRATIVES.clear()
+    monkeypatch.setattr(llm, "use_llm", lambda: True)
+    params = ReviewParams(account_id="CUST001")
+    fake = FakeClient(_good(build_review(con, params)))
+    monkeypatch.setattr(llm, "get_client", lambda: fake)
+    a = build_review(con, params, use_ai=True)
+    b = build_review(con, params, use_ai=True)
+    assert a.narrative.generated_by == b.narrative.generated_by == "llm" and len(fake.calls) == 1
+    build_mod._NARRATIVES.clear()
+
+
+def test_template_omits_missing_metric_clause(review):
+    k = [x.model_copy(update={"value": None, "range": None}) if x.metric_id == "co2_saving_kg"
+         else x for x in review.kpis]
+    n = template_narrative(review.model_copy(update={"kpis": k}))
+    assert "n/a" not in n.exec_summary and "CO₂e" not in n.exec_summary.split(chr(10) * 2)[1]
+
+
+def test_template_value_follows_sensitivity(con):
+    hi = build_review(con, ReviewParams(account_id="CUST001", sensitivity="high"))
+    vals = placeholder_values(hi)
+    assert vals["co2_saving_kg.value"] == vals["co2_saving_kg.high"] != vals["co2_saving_kg.base"]
+    assert vals["co2_saving_kg.value"] in template_narrative(hi).exec_summary
+
+
+def test_parse_intent_empty_tool_input_uses_keywords(monkeypatch):
+    monkeypatch.setattr(llm, "get_client", lambda: FakeClient(_tool_use()))
+    assert intent.parse_intent("focus on water", ACCOUNTS, BASELINES, True).priorities == ["water"]

@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from api.build import build_review
+from api.build import _narrate, build_review
 from api.review_model import ReviewParams
 from config.loader import CONFIG_DIR, load_assumptions, load_yaml
 from metrics.engine import Engine
@@ -61,16 +61,23 @@ def _account_exists(account_id: str) -> bool:
                              [account_id]).fetchone() is not None
 
 
-def _review(params: ReviewParams):
+def _build(params: ReviewParams):
     with state.lock:
         if not _account_exists(params.account_id):
             raise HTTPException(404, f"unknown account: {params.account_id}")
         if params.baseline_id not in state.engine.assumptions["baselines"]:
             raise HTTPException(422, f"unknown baseline: {params.baseline_id}")
         try:
-            return build_review(state.con, params, engine=state.engine, use_ai=True)
+            return build_review(state.con, params, engine=state.engine)
         except ValueError as e:  # unknown site / baseline etc.
             raise HTTPException(422, str(e))
+
+
+def _review(params: ReviewParams):
+    """Engine work under the lock; the (slow) LLM narration outside it."""
+    review = _build(params)
+    review.narrative = _narrate(review, True)
+    return review
 
 
 @app.get("/accounts")

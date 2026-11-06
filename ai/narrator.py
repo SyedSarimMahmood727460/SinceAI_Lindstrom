@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from ai import llm
-from ai.guard import check, render
+from ai.guard import check, render, strip_numerals
 from ai.templates import placeholder_values, template_narrative, wording_rules
 from api.review_model import ReviewModel
 from model.contracts import Narrative
@@ -19,8 +19,12 @@ N_POINTS = 5
 
 SYSTEM_TEMPLATE = """You write the narrative for a customer value and sustainability review.
 Rules:
-- Write NO digits at all. Every number must be a placeholder written as {{{{key}}}}, using only the
-  allowed keys listed in the input. Never invent a key.
+- Write NO digits and NO number words (one, two, half, double, twice, percent, hundred, ...).
+  Every number must be a placeholder written as {{{{key}}}}, using only the allowed keys listed in
+  the input. Never invent a key. Prefer <id>.value for a headline figure (it follows the selected
+  sensitivity) and <id>.low / <id>.high for its range.
+- The only numerals allowed are inside the names CO₂, CO₂e and Scope 1/2/3: write "CO₂" or "CO₂e".
+  Avoid any other numeral.
 - Refer to an observation as {{{{obs:<id>}}}} (it is replaced by the observation title).
 - The executive summary has at most {max_words} words.
 - Write exactly {n_points} discussion points, one sentence each.
@@ -31,7 +35,7 @@ Reply with JSON only: {{"exec_summary": "...", "discussion_points": ["...", ...]
 
 
 def _strip_digits(s: str) -> str:
-    return re.sub(r"\d+", "", s).replace("  ", " ").strip()
+    return strip_numerals(s).replace("  ", " ").strip()
 
 
 def _llm_input(review: ReviewModel, keys: list[str]) -> dict:
@@ -88,7 +92,8 @@ def narrate(review: ReviewModel, use_llm: bool) -> Narrative:
     banned = wording_rules()["banned"]
     system = SYSTEM_TEMPLATE.format(max_words=MAX_WORDS, n_points=N_POINTS, banned=", ".join(banned))
     payload = json.dumps(_llm_input(review, sorted(allowed)), ensure_ascii=False)
-    messages = [{"role": "user", "content": payload}]
+    base = [{"role": "user", "content": payload}]
+    feedback: list[dict] = []  # assistant reply + the guard's complaints, sent on the retry
     record: dict = {"run_id": review.meta.run_id, "model": llm.MODEL, "system": system,
                     "input": payload, "attempts": []}
     deadline = time.monotonic() + llm.TIMEOUT_S
@@ -102,22 +107,29 @@ def narrate(review: ReviewModel, use_llm: bool) -> Narrative:
                 break
             attempt: dict = {}
             record["attempts"].append(attempt)
+            out = ""
             try:
                 resp = client.messages.create(model=llm.MODEL, max_tokens=1200, system=system,
-                                              messages=messages, timeout=remaining)
+                                              messages=[*base, *feedback], timeout=remaining)
                 out = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
                 attempt["output"] = out
                 summary, points = _parse(out)
+                problems = _validate(summary, points, allowed, banned, values)
             except Exception as e:  # network, timeout, malformed output: try again, then fall back
                 attempt["error"] = f"{type(e).__name__}: {e}"
-                continue
-            problems = _validate(summary, points, allowed, banned, values)
+                problems = [f"the reply was not valid JSON of the required shape ({type(e).__name__})"]
+                summary = points = None
             attempt["violations"] = problems
             if not problems:
                 result = Narrative(exec_summary=render(summary, values),
                                    discussion_points=[render(p, values) for p in points],
                                    generated_by="llm")
                 break
+            note = ("Your reply was rejected by the output guard: " + "; ".join(problems)
+                    + ". Fix every point and reply with the JSON only.")
+            feedback = ([{"role": "assistant", "content": out},
+                         {"role": "user", "content": note}] if out.strip()
+                        else [{"role": "user", "content": note}])
     except Exception as e:  # no client / no key
         record["attempts"].append({"error": f"{type(e).__name__}: {e}"})
     record["generated_by"] = result.generated_by if result else "template"

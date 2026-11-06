@@ -24,11 +24,25 @@ Z_OUTLIER = 1.5
 MIN_SITES = 3
 
 
+_NARRATIVES: dict[str, Narrative] = {}  # LLM narratives by run_id, so chip clicks don't re-call
+_CACHE_MAX = 256
+
+
 def _narrate(review: ReviewModel, use_llm: bool) -> Narrative:
     """LLM narrative when enabled (VR_AI, API key), else the template; always guard-checked."""
     from ai import llm
     from ai.narrator import narrate
-    return narrate(review, use_llm and llm.use_llm())
+    if not (use_llm and llm.use_llm()):
+        return narrate(review, False)
+    key = review.meta.run_id
+    if key in _NARRATIVES:
+        return _NARRATIVES[key]
+    result = narrate(review, True)
+    if result.generated_by == "llm":  # a template fallback is retried on the next request
+        if len(_NARRATIVES) >= _CACHE_MAX:
+            _NARRATIVES.pop(next(iter(_NARRATIVES)))
+        _NARRATIVES[key] = result
+    return result
 
 
 def _select(m: MetricResult, sensitivity: str) -> MetricResult:
