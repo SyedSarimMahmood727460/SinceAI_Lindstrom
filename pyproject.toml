@@ -1,0 +1,23 @@
+[project]
+name = "value-review"
+version = "0.1.0"
+description = "Lindstrom customer value and sustainability review prototype"
+requires-python = ">=3.12"
+dependencies = [
+    "pandas", "openpyxl", "duckdb", "pydantic>=2", "PyYAML", "fastapi",
+    "uvicorn", "python-pptx", "matplotlib", "anthropic", "httpx",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["model", "adapters", "metrics", "insights", "api", "ai", "export", "config"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
