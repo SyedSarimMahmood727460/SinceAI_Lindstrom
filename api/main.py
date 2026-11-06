@@ -66,7 +66,10 @@ def _review(params: ReviewParams):
             raise HTTPException(404, f"unknown account: {params.account_id}")
         if params.baseline_id not in state.engine.assumptions["baselines"]:
             raise HTTPException(422, f"unknown baseline: {params.baseline_id}")
-        return build_review(state.con, params, engine=state.engine)
+        try:
+            return build_review(state.con, params, engine=state.engine)
+        except ValueError as e:  # unknown site / baseline etc.
+            raise HTTPException(422, str(e))
 
 
 @app.get("/accounts")
@@ -103,7 +106,9 @@ def _parse_intent(text: str) -> ViewSpec:
     """Hook for Task 9: uses ai.intent.keyword_intent when importable."""
     try:
         from ai.intent import keyword_intent
-    except ImportError:
+    except ModuleNotFoundError as e:
+        if e.name not in ("ai.intent", "ai"):
+            raise
         return ViewSpec(interpretation_text="Not recognised")
     with state.lock:
         return keyword_intent(text, state.con)
@@ -144,7 +149,10 @@ def _build_pptx(review_model) -> bytes | None:
 def export(req: ExportRequest):
     if req.format != "pptx":
         raise HTTPException(400, f"unsupported format: {req.format}")
-    params = ReviewParams(**req.model_dump(exclude={"format"}))
+    try:
+        params = ReviewParams(**req.model_dump(exclude={"format"}))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
     data = _build_pptx(_review(params))
     if data is None:
         raise HTTPException(501, "PPTX export is not available yet")

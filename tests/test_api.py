@@ -88,7 +88,7 @@ def test_intent_hook(client):
 
 def test_export_not_wired(client):
     r = client.post("/reviews/export", json={"account_id": "CUST001", "format": "pptx"})
-    assert r.status_code in (200, 501)
+    assert r.status_code == 501
 
 
 def test_root_serves_html(client):
@@ -100,3 +100,15 @@ def test_root_serves_html(client):
 def test_review_unicode(client):
     r = client.get("/accounts/CUST001/review")
     assert "Łódź" in r.text
+
+
+def test_review_unknown_site(client):
+    r = client.get("/accounts/CUST001/review", params={"site": "S999"})
+    assert r.status_code == 422
+
+
+def test_export_unknown_site(client):
+    r = client.post("/reviews/export", json={"account_id": "CUST001", "site": "S999"})
+    assert r.status_code == 422
+    r = client.post("/reviews/export", json={"account_id": "CUST001", "sensitivity": "zzz"})
+    assert r.status_code in (400, 422)
