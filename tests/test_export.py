@@ -54,8 +54,32 @@ def test_pptx_footer_on_every_slide(review, deck):
 
 
 def test_pptx_unicode_site_names(deck):
-    text = "\n".join(_slides_text(deck))
-    assert "Västerås" in text or "Łódź" in text
+    texts = _slides_text(deck)
+    highlights = next(t for t in texts if "Site highlights" in t)
+    assert "Kraków" in highlights  # highest washed kg per wearer for NorthStar
+    assert "Västerås" in "\n".join(texts)
+
+
+def test_kpi_slide_uses_headline_kpis(review, deck):
+    kpi_text = _slides_text(deck)[2]
+    shown = [k for k in review.kpis if k.customer_facing and k.display["headline"]][:8]
+    assert len(shown) == 8
+    positions = [kpi_text.index(k.label) for k in shown]
+    assert positions == sorted(positions)  # same order as the review
+    for k in shown:
+        assert fmt_value(k) in kpi_text
+
+
+def test_no_shape_runs_into_footer(deck):
+    prs = Presentation(str(deck))
+    footer_top = Inches(6.98)
+    for i, slide in enumerate(prs.slides, 1):
+        if i == 1:  # cover has a full-bleed background
+            continue
+        for sh in slide.shapes:
+            if sh.top < footer_top:  # footer rule/text/number start at or below this line
+                assert sh.top + sh.height <= footer_top, (i, sh.name)
+            assert sh.left >= 0 and sh.left + sh.width <= prs.slide_width, (i, sh.name)
 
 
 def test_pptx_customer_audience(con, tmp_path):
