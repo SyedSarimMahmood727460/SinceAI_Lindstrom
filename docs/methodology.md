@@ -95,7 +95,7 @@ Each metric also has a confidence level (High, Medium, Low-Med, Low) set in `con
 
 After loading, the pipeline runs cross-source consistency checks and records each failure as a WARNING (not an error: the rows stay usable).
 
-**C1, laundry volume:** the sum of customer washed kg routed to a laundry, per month, should not exceed that laundry's own washed kg. The pack fails this for **laundry L003 (Nordic Malmö WWS)**: customer kg routed to it totals 335,824 kg in 2025, against 31,017 kg reported by the laundry, about 10.8 times as much. It affects all 6 Apex sites and the 6 NorthStar sites in Sweden. (Monthly ratios vary, for example 11.25 times in January.)
+**C1, laundry volume:** the sum of customer washed kg routed to a laundry, per month, should not exceed that laundry's own washed kg. The pack fails this for **laundry L003 (Nordic Malmö WWS)**: customer kg routed to it totals 335,824 kg in 2025, against 31,017 kg reported by the laundry, about 10.8 times as much. It affects all 6 Apex sites and the 6 NorthStar sites in Sweden. (Monthly ratios vary from 9.6 to 12.6 times, for example 11.25 times in January.)
 
 Handling:
 

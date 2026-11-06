@@ -32,6 +32,8 @@ def placeholder_values(review: ReviewModel) -> dict[str, str]:
     """Every KPI as `<metric_id>.base|low|high`, plus names and observation titles."""
     vals: dict[str, str] = {}
     for k in review.kpis:
+        if not k.customer_facing:  # internal metrics are never offered to the LLM
+            continue
         base = k.range.base if k.range and k.range.base is not None else k.value
         vals[f"{k.metric_id}.base"] = fmt_value(base, k.unit)
         vals[f"{k.metric_id}.value"] = fmt_value(k.value, k.unit)  # the selected sensitivity
@@ -50,7 +52,8 @@ def placeholder_values(review: ReviewModel) -> dict[str, str]:
     vals["countries"] = ", ".join(review.meta.node.countries)
     for o in review.observations:
         vals[f"obs:{o.id}"] = o.title
-    for i, o in enumerate(review.observations[:2], 1):
+    levers = [o for o in review.observations if o.rule_id not in ("R7", "R8")]
+    for i, o in enumerate(levers[:2], 1):
         vals[f"lever.{i}"] = o.title.split(":")[0]
     return vals
 
@@ -93,10 +96,11 @@ def template_narrative(review: ReviewModel) -> Narrative:
             co2 += " ({{co2_saving_kg.low}} to {{co2_saving_kg.high}})"
         saved.append(co2)
     p2 = ("Compared with {{baseline.name}}, the circular service is estimated to have avoided "
-          + " and ".join(saved) + " in washing and logistics, vs {{baseline.name}} (estimate).") \
+          + " and ".join(saved) + " in washing and logistics (estimate).") \
         if saved else ""
     levers = [k for k in ("lever.1", "lever.2") if k in vals]
-    p3 = ("The biggest improvement levers for next year are "
+    p3 = (("The biggest improvement lever for next year is " if len(levers) == 1
+           else "The biggest improvement levers for next year are ")
           + " and ".join("{{%s}}" % k for k in levers) + ".") if levers else ""
     text = "\n\n".join(p for p in (p1, p2, p3) if p)
     return Narrative(exec_summary=render(text, vals),

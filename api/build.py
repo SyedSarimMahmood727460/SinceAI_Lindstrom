@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import statistics
+import threading
 from datetime import datetime, timezone
 
 from api.review_model import (
@@ -13,6 +15,7 @@ from insights.discussion import action_rows, discussion_points
 from insights.priorities import resolve_priorities
 from insights.rules import _weight, build_observations
 from metrics.engine import Engine
+from metrics.periods import period_months
 from model.contracts import MetricResult, Narrative, Observation
 
 TREND_IDS = ["active_wearers", "garments_allocated", "active_assets_scanned", "repairs",
@@ -26,6 +29,27 @@ MIN_SITES = 3
 
 _NARRATIVES: dict[str, Narrative] = {}  # LLM narratives by run_id, so chip clicks don't re-call
 _CACHE_MAX = 256
+_NARRATIVES_LOCK = threading.Lock()  # guards the dict only, never the LLM call
+
+_C1 = re.compile(r"customer washed_kg ([\d.]+) vs laundry washed_kg ([\d.]+) \(ratio ([\d.]+)x\)")
+DQ_COLS = ("check_id", "severity", "entity_type", "entity_id", "month", "detail")
+
+
+def dq_warning_rows(con, rows, months: list[str] | None = None) -> list[dict]:
+    """dq_flags rows as dicts, with the laundry's name and a readable message; optionally
+    restricted to the given months."""
+    names = dict(con.execute("select laundry_id, name from laundry").fetchall())
+    out = []
+    for r in rows:
+        w = dict(zip(DQ_COLS, r))
+        if months is not None and w["month"] not in months:
+            continue
+        w["entity_name"] = names.get(w["entity_id"]) if w["entity_type"] == "laundry" else None
+        m = _C1.fullmatch(w["detail"] or "")
+        w["message"] = (f"Customer volume routed {float(m[1]):,.0f} kg vs laundry total "
+                        f"{float(m[2]):,.0f} kg ({float(m[1]) / float(m[2]):.1f}×)") if m else w["detail"]
+        out.append(w)
+    return out
 
 
 def _narrate(review: ReviewModel, use_llm: bool) -> Narrative:
@@ -35,13 +59,15 @@ def _narrate(review: ReviewModel, use_llm: bool) -> Narrative:
     if not (use_llm and llm.use_llm()):
         return narrate(review, False)
     key = review.meta.run_id
-    if key in _NARRATIVES:
-        return _NARRATIVES[key]
+    with _NARRATIVES_LOCK:
+        if key in _NARRATIVES:
+            return _NARRATIVES[key]
     result = narrate(review, True)
     if result.generated_by == "llm":  # a template fallback is retried on the next request
-        if len(_NARRATIVES) >= _CACHE_MAX:
-            _NARRATIVES.pop(next(iter(_NARRATIVES)))
-        _NARRATIVES[key] = result
+        with _NARRATIVES_LOCK:
+            if len(_NARRATIVES) >= _CACHE_MAX:
+                _NARRATIVES.pop(next(iter(_NARRATIVES)))
+            _NARRATIVES[key] = result
     return result
 
 
@@ -187,10 +213,9 @@ def build_review(con, params: ReviewParams, engine: Engine | None = None,
     flag_rows = con.execute(
         "select check_id, severity, entity_type, entity_id, month, detail from dq_flags "
         "where list_contains(?, entity_id) order by check_id, entity_id, month", [entities]).fetchall()
-    cols = ("check_id", "severity", "entity_type", "entity_id", "month", "detail")
     data_quality = {
         "quarantine_count": con.execute("select count(*) from quarantine").fetchone()[0],
-        "warnings": [dict(zip(cols, r)) for r in flag_rows],
+        "warnings": dq_warning_rows(con, flag_rows, period_months(params.period)),
         "gaps": list(text["gaps"]),
         "hidden_modules": [],
     }

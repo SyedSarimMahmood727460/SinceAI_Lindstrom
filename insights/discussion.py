@@ -9,8 +9,9 @@ OWNERS = ["KAM + site manager", "Service owner", "Lindström laundry"]
 
 
 def _business(obs: list[Observation]) -> list[Observation]:
-    """R8 is a data caveat, not a business action, so it never feeds discussion or actions."""
-    return [o for o in obs if o.rule_id != "R8"]
+    """R7 (value headline, covered by the reporting question) and R8 (data caveat) are not
+    business actions, so they never feed discussion or actions."""
+    return [o for o in obs if o.rule_id not in ("R7", "R8")]
 
 
 def discussion_points(obs: list[Observation]) -> list[str]:

@@ -18,9 +18,11 @@ What it does:
 
 Requires Python 3.12.
 
+**The data pack is not in this repository.** By default the server looks for it at `../lindstrom_pack/Lindstrom_SinceAI2026/Lindstrom_SinceAI_Customer_Value_Synthetic_Data_Pack.xlsx`, relative to the repository root (so next to the `value-review` folder). If it lives elsewhere, point `VR_PACK_PATH` at the `.xlsx` file as below. If the file is missing, the server stops at start-up with an error naming `VR_PACK_PATH`.
+
 ```bat
 cd value-review
-python -m pip install -e .[dev]
+python -m pip install -e ".[dev]"
 set VR_PACK_PATH=C:\path\to\Lindstrom_SinceAI_Customer_Value_Synthetic_Data_Pack.xlsx
 python -m uvicorn api.main:app --port 8000
 ```
@@ -29,7 +31,7 @@ Then open http://127.0.0.1:8000.
 
 Without `-e .`, install the dependencies directly: `pandas openpyxl duckdb pydantic>=2 PyYAML fastapi uvicorn python-pptx matplotlib anthropic httpx` (plus `pytest` for tests).
 
-PowerShell: `$env:VR_PACK_PATH = "C:\path\to\pack.xlsx"`. Bash: `export VR_PACK_PATH=...`.
+The `pip install` line is quoted so it works in cmd, PowerShell and bash. PowerShell: `$env:VR_PACK_PATH = "C:\path\to\pack.xlsx"`. Bash: `export VR_PACK_PATH=...`.
 
 The pack is loaded into an in-memory DuckDB at server start (a few seconds). A relative `VR_PACK_PATH` is resolved against the repository root.
 
@@ -40,7 +42,7 @@ The pack is loaded into an in-memory DuckDB at server start (a few seconds). A r
 | `VR_PACK_PATH` | `../lindstrom_pack/Lindstrom_SinceAI2026/Lindstrom_SinceAI_Customer_Value_Synthetic_Data_Pack.xlsx` (relative to the repo root) | Path to the Excel data pack. |
 | `ANTHROPIC_API_KEY` | unset | Enables the LLM intent parser and narrator (model `claude-sonnet-5-5`, 15 s timeout). Unset means keyword parser and template narrative. |
 | `VR_AI` | `on` | `VR_AI=off` disables all LLM calls even when a key is set. |
-| `VR_INJECT_BAD_ROWS` | unset | `VR_INJECT_BAD_ROWS=1` injects 3 bad rows (unknown site, empty month, negative kg) at load time to demo the quarantine in the Data readiness view. The loader already supports this (`load_pack(..., inject_bad=True)`); reading the variable in `api/main.py` is being added separately, so check that your checkout reads it before relying on it. |
+| `VR_INJECT_BAD_ROWS` | unset | `VR_INJECT_BAD_ROWS=1` injects 3 bad rows (unknown site, empty month, negative kg) at load time to demo the quarantine in the Data readiness view. |
 | `VR_LOG_DIR` | `logs/` in the repo root | Where the narrator writes one JSON log per `run_id` (prompt, output, guard violations, `generated_by`). Only written when the LLM path runs. |
 
 ## API
@@ -48,7 +50,7 @@ The pack is loaded into an in-memory DuckDB at server start (a few seconds). A r
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/accounts` | Customers with industry and site count. |
-| GET | `/accounts/{id}/review?period=&product=&baseline=&sens=&priorities=&site=&audience=` | One `ReviewModel`. `audience=customer` hides non-customer-facing metrics. |
+| GET | `/accounts/{id}/review?period=&product=&baseline=&sens=&priorities=&hint=&site=&audience=` | One `ReviewModel`. `audience=customer` hides non-customer-facing metrics. |
 | POST | `/intent` `{text}` | Prompt to `ViewSpec`. |
 | GET | `/metrics/{metric_id}/explain?node_id=` | Definition, formula, assumptions, lineage. |
 | POST | `/reviews/export` | PPTX download (same params as review, `format: "pptx"`). PDF is not implemented. |
@@ -60,6 +62,8 @@ The pack is loaded into an in-memory DuckDB at server start (a few seconds). A r
 ```bat
 python -m pytest
 ```
+
+Tests that need the data pack are skipped when the pack is not found (see `VR_PACK_PATH`).
 
 ## Architecture
 
@@ -108,4 +112,4 @@ docs/       methodology.md, data_readiness.md, demo_script.md, architecture.md, 
 
 **Add a module.** Add an entry to `config/modules.json` (id, pack, page, component, required_metrics, priority_tags, industries) and a renderer for its `component` in `web/modules.js`. A module is hidden when a required metric is missing or not customer-facing, and is listed as hidden.
 
-**Add an industry rule.** Edit `config/industry_rules.yaml`: `defaults` (default priority order per industry), `topic_map` (customer topic to priority key) and `emphasis` (the "why this view" note). Priority keys are `water, emissions, cost, circularity, service`. The observation rules R1-R8 live in `insights/rules.py`; they compare sites of one account and need at least 3 sites (R4 needs at least 2 laundries).
+**Add an industry rule.** Edit `config/industry_rules.yaml`: `defaults` (default priority order per industry), `topic_map` (customer topic to priority key) and `emphasis` (the "why this view" note). Priority keys are `water, emissions, cost, circularity, service`. The observation rules R1-R8 live in `insights/rules.py`; R1-R3 and R5-R6 compare sites of one account and need at least 3 sites; R4 needs at least 2 laundries; R7 needs a saving to report; R8 is account-level (it fires when an input laundry carries a consistency warning).

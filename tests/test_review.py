@@ -137,3 +137,13 @@ def test_customer_audience_observations_and_actions_clean(con):
         hidden = {k.metric_id for k in build_review(con, ReviewParams(account_id=acc)).kpis
                   if not k.customer_facing}
         assert hidden and all(a["kpi_metric_id"] not in hidden for a in m.actions)
+
+
+def test_warnings_carry_entity_name_and_follow_period(con):
+    full = build_review(con, ReviewParams(account_id="CUST002"))
+    q1 = build_review(con, ReviewParams(account_id="CUST002", period="2025-Q1"))
+    assert len(full.data_quality["warnings"]) == 12 and len(q1.data_quality["warnings"]) == 3
+    w = full.data_quality["warnings"][0]
+    assert w["entity_name"] == "Nordic Malmö WWS" and w["entity_id"] == "L003"
+    assert w["message"].startswith("Customer volume routed 28,429 kg vs laundry total 2,527 kg")
+    assert w["message"].endswith("(11.3×)")

@@ -28,7 +28,7 @@ const SOURCE_LABEL = {prompt: 'from your prompt', chips: 'your selection', custo
 
 const S = {account: null, period: '2025', product: '', baseline: 'B_LOCAL', sens: 'base', priorities: null,
   prioritySource: null, audience: 'kam', view: 'overview', site: null, sort: null, intentText: ''};
-let R = null, siteReview = null, MODULES = [], ACCOUNTS = [];
+let R = null, siteReview = null, MODULES = [], ACCOUNTS = [], INTERNAL = [];
 const productNames = {};
 const charts = {};
 let reqSeq = 0, siteSeq = 0;
@@ -49,7 +49,10 @@ const getJSON = async path => (await api(path)).json();
 function reviewQuery(extra) {
   const p = new URLSearchParams({period: S.period, baseline: S.baseline, sens: S.sens, audience: S.audience});
   if (S.product) p.set('product', S.product);
-  if (S.priorities && S.priorities.length) p.set('priorities', S.priorities.join(','));
+  if (S.priorities && S.priorities.length) {
+    p.set('priorities', S.priorities.join(','));
+    if (S.prioritySource === 'prompt') p.set('hint', 'prompt');
+  }
   Object.entries(extra || {}).forEach(([k, v]) => p.set(k, v));
   return `/accounts/${encodeURIComponent(S.account)}/review?${p}`;
 }
@@ -116,7 +119,7 @@ function renderChips() {
 }
 
 function renderInterp() {
-  const ap = activePri(), src = S.prioritySource === 'prompt' ? 'prompt' : R.context.priority_source;
+  const ap = activePri(), src = R.context.priority_source;
   const srcLabel = src === 'industry' || src === 'customer' ? `${SOURCE_LABEL[src]} for ${R.meta.node.industry}` : SOURCE_LABEL[src];
   $('interp').innerHTML = (S.intentText ? `${esc(S.intentText)} · ` : '') +
     `Emphasis: <b>${esc(ap.map(p => PRI[p] || p).join(' → ') || 'balanced')}</b> (${esc(srcLabel)}) · ` +
@@ -130,6 +133,8 @@ function moduleStatus(mod) {
   if (!(mod.industries.includes('*') || mod.industries.includes(ind))) return {show: false, reason: `not used for ${ind}`};
   const missing = mod.required_metrics.filter(id => { const k = kpiOf(id); return !k || k.value == null; });
   if (!missing.length) return {show: true};
+  // Customer view: a module missing only internal (non-customer-facing) metrics is not a data gap.
+  if (S.audience === 'customer' && missing.every(id => INTERNAL.includes(id))) return {show: false, internal: true};
   const absent = missing.filter(id => !kpiOf(id));
   const why = S.audience === 'customer' && absent.length ? 'not customer-facing / missing data' : 'missing data';
   return {show: false, reason: `${why} (${missing.join(', ')})`};
@@ -141,7 +146,7 @@ const emptyFilter = () => R.kpis.length > 0 && R.kpis.every(k => k.value == null
 
 function hiddenModules() {
   if (emptyFilter()) return [];
-  const own = MODULES.map(m => ({m, st: moduleStatus(m)})).filter(x => !x.st.show)
+  const own = MODULES.map(m => ({m, st: moduleStatus(m)})).filter(x => !x.st.show && !x.st.internal)
     .map(x => ({id: x.m.id, page: x.m.page, reason: x.st.reason}));
   const fromApi = (R.data_quality.hidden_modules || []).map(h => (typeof h === 'string' ? {id: h, page: '', reason: 'hidden by the API'} : h));
   return [...own, ...fromApi.filter(h => !own.some(o => o.id === h.id))];
@@ -347,8 +352,8 @@ document.querySelectorAll('#aud button').forEach(b => { b.onclick = () => { if (
 async function init() {
   busy(true);
   try {
-    const [accounts, assumptions, modules] = await Promise.all([getJSON('/accounts'), getJSON('/config/assumptions'), getJSON('/config/modules')]);
-    ACCOUNTS = accounts; MODULES = modules;
+    const [accounts, assumptions, modules, internal] = await Promise.all([getJSON('/accounts'), getJSON('/config/assumptions'), getJSON('/config/modules'), getJSON('/config/internal-metrics')]);
+    ACCOUNTS = accounts; MODULES = modules; INTERNAL = internal;
     $('cust').innerHTML = accounts.map(a => `<option value="${esc(a.node_id)}">${esc(a.name)} (${a.site_count} sites)</option>`).join('');
     const bl = Object.entries(assumptions.baselines || {});
     $('base').innerHTML = bl.map(([id, b]) => `<option value="${esc(id)}">${esc(b.name)}${b.default ? ' (default)' : ''}</option>`).join('');

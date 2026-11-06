@@ -265,7 +265,7 @@ const Components = {
       <td class="l">${esc(labelOf(a.kpi_metric_id))}</td><td>${esc(fmtV(unitOf(a.kpi_metric_id), a.value_2025))}</td>
       <td><input type="text" placeholder="set" value="${esc(a.target_2026 == null ? '' : a.target_2026)}"></td></tr>`).join('');
     return {html: `<div class="card"><h2>Agreed actions → tracked next year</h2><table>
-      <tr><th class="l">Action</th><th class="l">Owner</th><th class="l">KPI</th><th>2025</th><th>2026 target</th></tr>${rows ||
+      <tr><th class="l">Action</th><th class="l">Owner</th><th class="l">KPI</th><th>${esc(ctx.R.meta.period)}</th><th>2026 target</th></tr>${rows ||
       '<tr><td class="l" colspan="5"><span class="small">No actions for this view.</span></td></tr>'}</table>
       <div class="small" style="margin-top:6px">Targets are editable for the meeting and are not saved in this prototype.</div></div>`};
   },
@@ -294,9 +294,9 @@ const Components = {
     const TITLES = {C1: 'Laundry volume inconsistency'};
     const alerts = Object.values(groups).sort((a, b) => (a[0].check_id === 'C1' ? -1 : 0) - (b[0].check_id === 'C1' ? -1 : 0)).map(ws => {
       const w0 = ws[0], t = TITLES[w0.check_id] || `Check ${w0.check_id}`;
-      return `<div class="alert"><div class="t">⚠ ${esc(t)}: ${esc(w0.entity_id)} <span class="small">(${esc(w0.check_id)} · ${ws.length} monthly warning${ws.length > 1 ? 's' : ''})</span></div>
+      return `<div class="alert"><div class="t">⚠ ${esc(t)}: ${esc(w0.entity_name ? `${w0.entity_name} (${w0.entity_id})` : w0.entity_id)} <span class="small">(${esc(w0.check_id)} · ${ws.length} monthly warning${ws.length > 1 ? 's' : ''})</span></div>
         <div class="small" style="margin:4px 0 6px">${w0.check_id === 'C1' ? 'Customer washed kg routed to this laundry is far above the laundry’s own reported washed kg, so per-kg allocation of water, energy, CO₂e and waste is uncertain. Affected figures carry ⚠.' : ''}</div>
-        <table><tr><th class="l">Month</th><th class="l">Detail</th></tr>${ws.map(w => `<tr><td class="l">${esc(w.month)}</td><td class="l">${esc(w.detail)}</td></tr>`).join('')}</table></div>`; }).join('');
+        <table><tr><th class="l">Month</th><th class="l">Detail</th></tr>${ws.map(w => `<tr><td class="l">${esc(w.month)}</td><td class="l">${esc(w.message || w.detail)}</td></tr>`).join('')}</table></div>`; }).join('');
     return {html: `${alerts || '<div class="card small">No data-consistency warnings touch this account.</div>'}
       <div class="card" style="margin-top:12px"><h2>Quarantined source rows</h2><p><b>${esc(num(dq.quarantine_count))}</b> rows failed validation on load and are excluded from every figure.</p></div>`};
   },

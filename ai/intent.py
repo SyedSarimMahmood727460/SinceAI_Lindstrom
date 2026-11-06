@@ -9,9 +9,9 @@ from model.contracts import ViewSpec
 PRIORITY_KEYWORDS = {
     "water": ["water", "litre", "liter"],
     "emissions": ["emission", "co2", "carbon", "climate", "scope"],
-    "cost": ["cost", "money", "euro", "€", "budget", "allocation", "utili", "optimi"],
+    "cost": ["cost", "money", r"re:euros?\b", "€", "budget", "allocation", "utili", "optimi"],
     "circularity": ["circular", "repair", "waste", "recycl", "lifetime", "reuse"],
-    "service": ["service", "delivery", "on-time", "late", "reliab", "hygiene", "continuity",
+    "service": ["service", "delivery", "on-time", r"re:late\b", "reliab", "hygiene", "continuity",
                 "request"],
 }
 PRIORITY_LABELS = {"water": "Water", "emissions": "Emissions", "cost": "Cost",
@@ -49,10 +49,18 @@ def _interpretation(text: str, spec: ViewSpec, accounts: list[dict], baselines: 
     return spec
 
 
+def _priorities(q: str) -> list[str]:
+    """Keywords match at a word start (stems like "recycl" still match; "late" is not in
+    "calculate"). "circular service" is the product name, so it does not count as service."""
+    q = re.sub(r"circular service", "circular", q)
+    return [k for k, kws in PRIORITY_KEYWORDS.items()
+            if any(re.search(r"(?<![a-z0-9])" + (w[3:] if w.startswith("re:") else re.escape(w)), q)
+                   for w in kws)]
+
+
 def keyword_intent(text: str, accounts: list[dict], baselines: dict) -> ViewSpec:
     q = text.lower()
-    spec = ViewSpec(priorities=[k for k, kws in PRIORITY_KEYWORDS.items()
-                                if any(w in q for w in kws)])
+    spec = ViewSpec(priorities=_priorities(q))
     for a in accounts:
         first = (a.get("name") or "").split(" ")[0].lower()
         if first and first in q:

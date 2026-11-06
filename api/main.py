@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from api.build import _narrate, build_review
+from api.build import _narrate, build_review, dq_warning_rows
 from api.review_model import ReviewParams
 from config.loader import CONFIG_DIR, load_assumptions, load_yaml
 from metrics.engine import Engine
@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "web"
 DEFAULT_PACK = ("../lindstrom_pack/Lindstrom_SinceAI2026/"
                 "Lindstrom_SinceAI_Customer_Value_Synthetic_Data_Pack.xlsx")
+KNOWN_PRIORITIES = ("water", "emissions", "cost", "circularity", "service")
 PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 
 
@@ -47,7 +48,10 @@ state = State()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     pack = (ROOT / os.environ.get("VR_PACK_PATH", DEFAULT_PACK)).resolve()
-    state.con = load_pack(pack)
+    if not pack.is_file():
+        raise RuntimeError(f"Data pack not found at {pack}. Set VR_PACK_PATH to the "
+                           "Lindstrom data pack .xlsx file.")
+    state.con = load_pack(pack, inject_bad=os.environ.get("VR_INJECT_BAD_ROWS") == "1")
     state.engine = Engine(state.con, load_assumptions(), load_yaml("metrics.yaml"))
     yield
     state.con.close()
@@ -94,7 +98,7 @@ def accounts():
 def review(account_id: str, period: str = "2025", product: str | None = None,
            baseline: str = "B_LOCAL", sens: str = "base", priorities: str | None = None,
            site: str | None = None, audience: str = "kam", hint: str | None = None):
-    chips = [p.strip() for p in priorities.split(",") if p.strip()] if priorities else None
+    chips = [p.strip() for p in priorities.split(",") if p.strip() in KNOWN_PRIORITIES]         if priorities else None
     try:
         params = ReviewParams(account_id=account_id, period=period, product=product,
                               baseline_id=baseline, sensitivity=sens, priorities=chips,
@@ -134,7 +138,10 @@ def explain(metric_id: str, node_id: str, period: str = "2025", baseline: str = 
     with state.lock:
         if state.con.execute("select 1 from org_node where node_id = ?", [node_id]).fetchone() is None:
             raise HTTPException(404, f"unknown node: {node_id}")
-        result = state.engine.compute(node_id, period=period, baseline_id=baseline)[metric_id]
+        try:
+            result = state.engine.compute(node_id, period=period, baseline_id=baseline)[metric_id]
+        except ValueError as e:  # bad period
+            raise HTTPException(422, str(e))
     ids = set(result.assumptions)
     register = [r for r in state.engine.assumptions["register"] if r["id"] in ids]
     return {"definition": registry[metric_id], "result": result.model_dump(mode="json"),
@@ -183,11 +190,10 @@ def data_quality(account_id: str = Query(...)):
         entities += [r[0] for r in con.execute(
             "select distinct laundry_id from fact_service_month where customer_id = ? "
             "and laundry_id is not null", [account_id]).fetchall()]
-        cols = ("check_id", "severity", "entity_type", "entity_id", "month", "detail")
-        warnings = [dict(zip(cols, r)) for r in con.execute(
+        warnings = dq_warning_rows(con, con.execute(
             "select check_id, severity, entity_type, entity_id, month, detail from dq_flags "
             "where list_contains(?, entity_id) order by check_id, entity_id, month",
-            [entities]).fetchall()]
+            [entities]).fetchall())
     return {"sources": sources, "quarantine": quarantine, "warnings": warnings}
 
 
@@ -202,6 +208,13 @@ def config_modules():
     if not path.exists():
         return []
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+@app.get("/config/internal-metrics")
+def config_internal_metrics():
+    """Metric ids that are never customer-facing (the dashboard hides their modules)."""
+    return sorted(mid for mid, spec in state.engine.registry.items()
+                  if not spec.get("customer_facing", True))
 
 
 @app.get("/", include_in_schema=False)

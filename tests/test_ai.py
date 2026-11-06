@@ -237,3 +237,43 @@ def test_template_value_follows_sensitivity(con):
 def test_parse_intent_empty_tool_input_uses_keywords(monkeypatch):
     monkeypatch.setattr(llm, "get_client", lambda: FakeClient(_tool_use()))
     assert intent.parse_intent("focus on water", ACCOUNTS, BASELINES, True).priorities == ["water"]
+
+
+def test_levers_exclude_value_headline_and_data_caveat(review):
+    vals = placeholder_values(review)
+    titles = {o.title.split(":")[0] for o in review.observations if o.rule_id in ("R7", "R8")}
+    assert "lever.1" in vals and vals["lever.1"] not in titles
+    assert vals.get("lever.2") not in titles
+    text = template_narrative(review).exec_summary
+    for t in titles:
+        assert t not in text.split("\n\n")[-1]
+
+
+def test_single_lever_uses_singular_and_none_omits(review):
+    one = review.model_copy(update={"observations": [
+        o for o in review.observations if o.rule_id in ("R7", "R8", "R2")]})
+    assert "improvement lever for next year is" in template_narrative(one).exec_summary
+    none = review.model_copy(update={"observations": [
+        o for o in review.observations if o.rule_id in ("R7", "R8")]})
+    assert "improvement lever" not in template_narrative(none).exec_summary
+
+
+def test_baseline_named_once_per_sentence(review):
+    p2 = template_narrative(review).exec_summary.split("\n\n")[1]
+    assert p2.count(review.meta.baseline["name"]) == 1
+
+
+def test_internal_metrics_never_placeholders(con):
+    kam = build_review(con, ReviewParams(account_id="CUST002", audience="kam"))
+    assert any(k.metric_id == "idle_stock_value_eur" for k in kam.kpis)
+    assert not any(key.startswith("idle_stock_value_eur") for key in placeholder_values(kam))
+
+
+def test_intent_word_boundaries():
+    for q in ("calculate the totals", "Europe overview"):
+        assert intent.keyword_intent(q, ACCOUNTS, BASELINES).priorities == []
+    assert intent.keyword_intent("recycling and utilisation", ACCOUNTS, BASELINES).priorities \
+        == ["cost", "circularity"]
+    assert intent.keyword_intent("circular service", ACCOUNTS, BASELINES).priorities \
+        == ["circularity"]
+    assert intent.keyword_intent("late deliveries", ACCOUNTS, BASELINES).priorities == ["service"]

@@ -130,3 +130,37 @@ def test_intent_endpoint_keywords(client):
     assert r.json()["node_id"] == "CUST002" and r.json()["view"] == "steering"
     assert client.post("/intent", json={"text": "hello there"}).json()[
         "interpretation_text"].startswith("Not recognised")
+
+
+def test_explain_bad_period_is_422(client):
+    r = client.get("/metrics/co2_saving_kg/explain", params={"node_id": "CUST001", "period": "bad"})
+    assert r.status_code == 422
+
+
+def test_unknown_priorities_are_dropped(client):
+    r = client.get("/accounts/CUST001/review", params={"priorities": "water,bogus"})
+    assert r.json()["context"]["active_priorities"] == ["water"]
+
+
+def test_internal_metrics_endpoint(client):
+    assert "idle_stock_value_eur" in client.get("/config/internal-metrics").json()
+
+
+def test_inject_bad_rows_env(pack_path, monkeypatch):
+    monkeypatch.setenv("VR_INJECT_BAD_ROWS", "1")
+    with TestClient(app) as c:
+        q = c.get("/data-quality", params={"account_id": "CUST001"}).json()["quarantine"]
+    assert len(q) == 3
+
+
+def test_missing_pack_names_env_var(monkeypatch):
+    import asyncio
+
+    from api.main import lifespan
+    monkeypatch.setenv("VR_PACK_PATH", "no/such/pack.xlsx")
+
+    async def enter():
+        async with lifespan(app):
+            pass
+    with pytest.raises(RuntimeError, match="VR_PACK_PATH"):
+        asyncio.run(enter())

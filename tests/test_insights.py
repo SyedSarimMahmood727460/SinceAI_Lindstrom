@@ -118,3 +118,22 @@ def test_action_rows(inputs):
 def test_sorted_by_score(inputs):
     obs = _obs(inputs, "CUST001")
     assert [o.score for o in obs] == sorted((o.score for o in obs), reverse=True)
+
+
+def test_discussion_excludes_value_headline(inputs):
+    d = inputs["CUST001"]
+    obs = _obs(inputs, "CUST001")
+    r7 = next(o for o in obs if o.rule_id == "R7")
+    assert r7.action not in discussion_points(obs)
+    rows = action_rows(obs, d["account_metrics"], d["site_metrics"])
+    assert all(r["text"] != r7.action for r in rows)
+
+
+def test_r8_suppressed_on_empty_filter(con, engine):
+    q = dict(product="P1004")
+    acc = engine.compute("CUST002", **q)
+    assert all(m.value is None for m in acc.values())
+    names = dict(con.execute("select node_id, name from org_node where level = 'SITE'").fetchall())
+    obs = build_observations("CUST002", acc, engine.site_metrics("CUST002", **q), names,
+                             engine.laundry_stats("CUST002"), "Industrial", ["cost"], "Local")
+    assert obs == []

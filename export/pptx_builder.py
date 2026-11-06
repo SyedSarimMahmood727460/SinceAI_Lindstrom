@@ -61,7 +61,7 @@ def fmt_number(value: float | None, unit: str) -> str:
     num = f"{v:,.{dec}f}"
     if u == "%":
         return f"{num}%"
-    return f"{num} {u}" if u else num
+    return f"{num} {u}" if u and u != "count" else num
 
 
 def fmt_value(metric) -> str:
@@ -86,7 +86,8 @@ def tag(metric) -> str:
 def _no_internal(text: str) -> str:
     """Drop clauses that mention internal-only metrics (the deck is customer-facing)."""
     parts = [t for t in str(text).replace(";", ".").split(".") if t.strip() and "idle stock" not in t.lower()]
-    return ". ".join(t.strip() for t in parts) + ("." if parts else "")
+    parts = [t.strip()[0].upper() + t.strip()[1:] for t in parts]
+    return ". ".join(parts) + ("." if parts else "")
 
 
 def clip(text: str, n: int) -> str:
@@ -388,7 +389,7 @@ def _discussion_slide(prs, review, n):
     _heading(tf, "Proposed actions", first=True)
     if rows:
         _table(slide, Inches(6.4), Inches(1.75), [2.7, 1.3, 1.25, 1.1], rows,
-               ["Action", "Owner", "2025", "2026 target"], size=12, row_h=0.7, header_size=12)
+               ["Action", "Owner", review.meta.period, "2026 target"], size=12, row_h=0.7, header_size=12)
 
 
 def _method_slide(prs, review, n):
@@ -428,7 +429,10 @@ def _appendix_slide(prs, review, n):
     if not groups:
         _bullets(tf, ["None raised for this selection."], 12, space=2, first=False)
     for (check, ent), ws in list(groups.items())[:2]:
-        _run(tf.add_paragraph(), clip(f"{check} · {ent} · {len(ws)} month(s): {ws[0].get('detail', '')}", 170), 12)
+        w0 = ws[0]
+        who = f"{w0['entity_name']} ({ent})" if w0.get("entity_name") else str(ent)
+        what = w0.get("message") or w0.get("detail", "")
+        _run(tf.add_paragraph(), clip(f"{check} · {who} · {len(ws)} month(s), e.g. {w0.get('month', '')}: {what}", 170), 12)
     if len(groups) > 2:
         _run(tf.add_paragraph(), f"+ {len(groups) - 2} more warning group(s)", 12, False, GREY)
     gaps = dq.get("gaps", [])[:7]

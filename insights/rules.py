@@ -134,7 +134,8 @@ def build_observations(account_id: str, account_metrics: dict[str, MetricResult]
     laundries = [x for x in laundry_stats if x.get("dq_warning")]
     fallback = [account_metrics["recycling_rate"]] if "recycling_rate" in account_metrics else []
     metrics = flagged or fallback
-    if (flagged or laundries) and metrics:
+    no_data = all(m.value is None for m in account_metrics.values())  # empty filter
+    if (flagged or laundries) and metrics and not no_data:
         ev = [(m.metric_id, account_id) for m in metrics]
         names = ", ".join(x["name"] for x in laundries) or "a serving laundry"
         add("R8", account_id, "Laundry volume data needs confirmation",

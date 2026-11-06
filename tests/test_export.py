@@ -93,3 +93,20 @@ def test_pptx_empty_filter(con, tmp_path):
     path = build_pptx(rv, tmp_path / "e.pptx")
     texts = _slides_text(path)
     assert len(texts) == 9 and "No data for this filter" in texts[2]
+
+
+def test_pptx_appendix_names_laundry_and_period(con, tmp_path):
+    rv = build_review(con, ReviewParams(account_id="CUST002", period="2025-Q2"))
+    ws = rv.data_quality["warnings"]
+    assert ws and {w["month"] for w in ws} <= {"2025-04", "2025-05", "2025-06"}
+    assert ws[0]["entity_name"] == "Nordic Malmö WWS" and "×" in ws[0]["message"]
+    text = "\n".join(_slides_text(build_pptx(rv, tmp_path / "a.pptx")))
+    assert "Nordic Malmö WWS (L003)" in text and "Customer volume routed" in text
+    assert "2025-Q2" in text.split("2026 target")[0].split("Proposed actions")[-1]
+
+
+def test_fmt_number_count_has_no_unit_and_no_lowercase_start():
+    from export.pptx_builder import _no_internal, fmt_number
+    assert fmt_number(24, "count") == "24"
+    out = _no_internal("Idle stock is high; the note stays. other text")
+    assert all(p.strip()[0].isupper() for p in out.split(". ") if p.strip())
