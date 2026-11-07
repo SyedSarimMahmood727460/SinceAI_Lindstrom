@@ -29,6 +29,9 @@ HYGIENE_NOTE = ("Industrial laundering gives process control that home washing c
                 "context, not compliance advice.")
 BASE_ASSUMPTIONS = ["A001", "T1"]
 CONTRACT_KEY = "contract_price_eur_per_year"
+# Shown for explanation only: garment purchases already use the shorter no-repair life, so
+# adding the replacements avoided by repairs would count the same garments twice.
+NOT_IN_TOTAL = {"extra_replacements"}
 
 
 def _base(m: MetricResult | None) -> float | None:
@@ -108,7 +111,7 @@ def compute_dto(engine, account_id: str, period: str, product: str | None,
             v[handling[0]] = None if handling_h is None else handling_h * labour
         admin_h = None if sites is None else sites * inp("admin_h_per_site_month", end) * n_months
         v["admin"] = None if admin_h is None else admin_h * labour
-        v["diy_total"] = _total(list(v.values()))
+        v["diy_total"] = _total([x for k, x in v.items() if k not in NOT_IN_TOTAL])
         hours[end] = _total([handling_h, admin_h])
         for k, x in v.items():
             lines.setdefault(k, {})[end] = x
@@ -152,7 +155,9 @@ def compute_dto(engine, account_id: str, period: str, product: str | None,
          f"repair (T11) {m12}", ["fact_service_month", "product"]),
         ("extra_replacements", "Extra replacements without repairs",
          BASE_ASSUMPTIONS + ["A002"],
-         "Σ over products of repairs × replacements per repair (T1) × product purchase cost",
+         "Effect of repairs — already reflected in garment purchases at the shorter no-repair "
+         "garment life; shown for explanation, not added to the total. (Σ over products of "
+         "repairs × replacements per repair (T1) × product purchase cost)",
          ["fact_repair_month", "product"]),
         ("washing", "Washing cost", washing_ids, washing_formula, ["fact_service_month"]),
     ]
@@ -163,13 +168,15 @@ def compute_dto(engine, account_id: str, period: str, product: str | None,
     spec.append(("admin", "Garment admin", aid("admin_h_per_site_month", "labour_eur_per_h"),
                  f"sites with activity × admin h/site/month (T10) × {n_months} months × "
                  "staff cost (T8)", ["fact_service_month"]))
-    line_results = [{"id": lid, "label": label,
+    line_results = [{"id": lid, "label": label, "in_total": lid not in NOT_IN_TOTAL,
                      "diy": result(lid, label, "EUR", lines[lid], ids, formula, facts)}
                     for lid, label, ids, formula, facts in spec]
-    all_ids = [a for x in line_results for a in x["diy"].assumptions]
-    all_facts = list(dict.fromkeys(f for *_, facts in spec for f in facts))
+    all_ids = [a for x in line_results if x["in_total"] for a in x["diy"].assumptions]
+    all_facts = list(dict.fromkeys(f for lid, *_, facts in spec if lid not in NOT_IN_TOTAL
+                                   for f in facts))
     diy_total = result("diy_total", "Do-it-yourself total", "EUR", lines["diy_total"], all_ids,
-                       "sum of the do-it-yourself cost lines above", all_facts)
+                       "sum of the do-it-yourself cost lines marked in_total (extra "
+                       "replacements are shown but not added)", all_facts)
     contract_r = None if price is None else result(
         "contract_price", "Lindström contract price", "EUR", contract, [],
         f"contract price per year (entered by the account manager) {m12}", [])
@@ -190,6 +197,8 @@ def compute_dto(engine, account_id: str, period: str, product: str | None,
         "baseline": baseline_id,
         "inputs": inputs,
         "lines": line_results,
+        # in-total lines without data: the total is partial when this is not empty
+        "missing_lines": [x["id"] for x in line_results if x["in_total"] and x["diy"].value is None],
         "diy_total": diy_total,
         "contract_price": contract_r,
         "net": net_r,

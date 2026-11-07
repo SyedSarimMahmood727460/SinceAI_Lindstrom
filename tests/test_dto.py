@@ -41,8 +41,33 @@ def test_dto_defaults_northstar(engine):
         assert m.formula_text
     assert d["convenience"]["staff_hours_freed"].unit == "h"
     assert d["convenience"]["staff_hours_freed"].value > 0
-    total = sum(m.range.base for m in _lines(d).values())
-    assert d["diy_total"].range.base == pytest.approx(total)
+    assert d["missing_lines"] == []
+    in_total = {x["id"]: x["in_total"] for x in d["lines"]}
+    assert in_total == {"garment_purchases": True, "extra_replacements": False,
+                        "washing": True, "admin": True}
+    assert "not added to the total" in _lines(d)["extra_replacements"].formula_text
+    assert "A002" not in d["diy_total"].assumptions
+    for end in ("low", "base", "high"):
+        total = sum(getattr(x["diy"].range, end) for x in d["lines"] if x["in_total"])
+        assert getattr(d["diy_total"].range, end) == pytest.approx(total)
+
+
+def test_dto_missing_lines(engine, monkeypatch):
+    """A line without data is listed so the UI can say the total is partial."""
+    import metrics.dto as dto_mod
+    real = dto_mod.base_frames
+
+    def no_costs(*a, **kw):
+        f = real(*a, **kw)
+        f["activity"] = f["activity"].assign(purchase_cost_eur=float("nan"))
+        return f
+
+    monkeypatch.setattr(dto_mod, "base_frames", no_costs)
+    d = _dto(engine)
+    assert d["missing_lines"] == ["garment_purchases"]
+    assert _lines(d)["garment_purchases"].value is None
+    present = sum(x["diy"].range.base for x in d["lines"] if x["in_total"] and x["diy"].value)
+    assert d["diy_total"].range.base == pytest.approx(present)
 
 
 def test_dto_net_with_contract(engine):
@@ -72,6 +97,7 @@ def test_dto_baseline_formula_switch(engine):
 def test_dto_ranges_ordered(engine):
     for baseline in A["baselines"]:
         d = _dto(engine, {"values": {"contract_price_eur_per_year": 50000}}, baseline=baseline)
+        assert d["missing_lines"] == []
         results = [*_lines(d).values(), d["diy_total"], d["net"],
                    d["convenience"]["staff_hours_freed"]]
         for m in results:
@@ -111,6 +137,8 @@ def test_dto_mats_only(pack_path):
         assert d["diy_total"].value is not None
         review = build_review(con, ReviewParams(account_id="CUST004", service_line="Mats"))
         assert review.dto is not None and review.dto.hygiene_note is None
+        assert {x.id: x.in_total for x in review.dto.lines}["washing"] is True
+        assert isinstance(review.dto.missing_lines, list)
     finally:
         con.close()
 

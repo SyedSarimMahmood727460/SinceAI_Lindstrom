@@ -47,7 +47,15 @@ dto_inputs:
   labour_eur_per_h: {label: Staff cost, unit: EUR/h, default: 30.0, low: 25.0, high: 40.0, assumption_id: T8}
   handling_min_per_kg: {label: Washing & handling time (in-house/home), unit: min/kg, default: 3.0, low: 2.0, high: 5.0, assumption_id: T9}
   admin_h_per_site_month: {label: Garment admin time without service, unit: h/site/month, default: 4.0, low: 2.0, high: 8.0, assumption_id: T10}
-  garment_life_years_no_repair: {label: Garment life without repair service, unit: years, default: 2.0, low: 1.5, high: 3.0, assumption_id: T11}
+  garment_life_years_no_repair:
+    label: Garment life without repair service
+    unit: years
+    default: 2.0
+    low: 1.5
+    high: 3.0
+    assumption_id: T11
+    positive: true  # divides the garment purchases; must be > 0
+    help: "Longer life = cheaper do-it-yourself; the low (conservative) case uses the longest life."
 register:
 - id: A001
   assumption: Default comparison baseline

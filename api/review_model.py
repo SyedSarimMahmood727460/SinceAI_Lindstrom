@@ -72,6 +72,7 @@ class SiteEntry(BaseModel):
 class DtoLine(BaseModel):
     id: str
     label: str
+    in_total: bool = True  # False: shown for explanation, not added to diy_total
     diy: MetricResult
 
 
@@ -81,6 +82,7 @@ class Dto(BaseModel):
     baseline: str
     inputs: list[dict[str, Any]]
     lines: list[DtoLine]
+    missing_lines: list[str] = Field(default_factory=list)  # in-total lines without data
     diy_total: MetricResult
     contract_price: MetricResult | None = None
     net: MetricResult | None = None

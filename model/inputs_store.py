@@ -47,16 +47,26 @@ def validate_inputs(data: dict, spec: dict) -> dict:
         raise ValueError("inputs must be an object of key: number")
     allowed = _allowed(spec)
     out: dict[str, float] = {}
+    positive = {f"{k}{sfx}" for k, s in spec.items() if s.get("positive")
+                for sfx in ("", "_low", "_high")}
     for key, v in data.items():
         if key not in allowed:
             raise ValueError(f"unknown input key: {key}")
         if v is None:
             continue
-        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
             raise ValueError(f"{key}: must be a number, got {v!r}")
+        try:
+            v = float(v)
+        except OverflowError:
+            raise ValueError(f"{key}: number too large") from None
+        if not math.isfinite(v):
+            raise ValueError(f"{key}: must be a finite number")
+        if key in positive and v <= 0:
+            raise ValueError(f"{key}: must be > 0, got {v:g}")
         if v < 0:
-            raise ValueError(f"{key}: must be >= 0, got {v}")
-        out[key] = v
+            raise ValueError(f"{key}: must be >= 0, got {v:g}")
+        out[key] = int(v) if v.is_integer() and abs(v) < 2 ** 53 else v
     for key, s in spec.items():
         lo = out.get(f"{key}_low", out.get(key, s["low"]))
         base = out.get(key, s["default"])
@@ -118,10 +128,10 @@ def effective_inputs(stored: dict, spec: dict) -> list[dict]:
             "high": values.get(f"{key}_high", base if fixed else s["high"]),
             "source": "kam" if entered else "default",
             "entered_at": max((dates[k] for k in entered if k in dates), default=None),
-            "assumption_id": s["assumption_id"]})
+            "assumption_id": s["assumption_id"], "help": s.get("help")})
     price = values.get(CONTRACT_KEY)
     rows.append({"key": CONTRACT_KEY, **CONTRACT, "value": price, "low": price, "high": price,
                  "source": "kam" if price is not None else "default",
                  "entered_at": dates.get(CONTRACT_KEY) if price is not None else None,
-                 "assumption_id": None})
+                 "assumption_id": None, "help": None})
     return rows

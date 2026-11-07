@@ -70,6 +70,25 @@ def test_inputs_reject_non_numeric(store):
     assert not (store / "CUST001.json").exists()
 
 
+def test_garment_life_must_be_positive():
+    for data in ({"garment_life_years_no_repair": 0},
+                 {"garment_life_years_no_repair_low": 0}):
+        with pytest.raises(ValueError, match="garment_life_years_no_repair"):
+            validate_inputs(data, SPEC)
+    validate_inputs({"labour_eur_per_h": 0}, SPEC)  # zero is fine where it cannot divide
+
+
+def test_reject_huge_number():
+    with pytest.raises(ValueError, match="labour_eur_per_h"):
+        validate_inputs({"labour_eur_per_h": 10 ** 400}, SPEC)
+
+
+def test_garment_life_help_text():
+    assert "longest life" in SPEC["garment_life_years_no_repair"]["help"]
+    row = _by_key(effective_inputs({}, SPEC))["garment_life_years_no_repair"]
+    assert "cheaper do-it-yourself" in row["help"]
+
+
 def test_reject_unknown_key():
     with pytest.raises(ValueError, match="bogus_key"):
         validate_inputs({"bogus_key": 1}, SPEC)
@@ -94,6 +113,10 @@ def test_inputs_file_corrupt_uses_defaults(store, caplog):
                                         encoding="utf-8")
     assert load_inputs("CUST002", SPEC) == {}
     assert load_inputs("CUST003") == {}  # missing file
+    # an old file with a zero garment life falls back to defaults (no division by zero)
+    (store / "CUST001.json").write_text(
+        json.dumps({"values": {"garment_life_years_no_repair": 0}}), encoding="utf-8")
+    assert load_inputs("CUST001", SPEC) == {}
 
 
 def test_inputs_isolated_per_account(store):
@@ -125,7 +148,21 @@ def test_put_inputs_422(client, store):
     assert "labour_eur_per_h" in r.text
     assert client.put("/accounts/CUST001/inputs", json={"nope": 1}).status_code == 422
     assert client.put("/accounts/NOPE/inputs", json={"labour_eur_per_h": 40}).status_code == 404
+    assert client.put("/accounts/CUST001/inputs",
+                      json={"garment_life_years_no_repair": 0}).status_code == 422
+    r = client.put("/accounts/CUST001/inputs", content=b'{"labour_eur_per_h": 1' + b"0" * 400 + b"}",
+                   headers={"content-type": "application/json"})
+    assert r.status_code == 422
     assert not (store / "CUST001.json").exists()
+
+
+def test_stored_zero_life_review_ok(client, store):
+    store.mkdir(parents=True)
+    (store / "CUST001.json").write_text(
+        json.dumps({"values": {"garment_life_years_no_repair": 0}}), encoding="utf-8")
+    r = client.get("/accounts/CUST001/review")
+    assert r.status_code == 200
+    assert r.json()["dto"]["diy_total"]["value"] > 0
 
 
 def test_put_then_review_reflects(client, store):
