@@ -2,11 +2,11 @@
 
 **Prototype · synthetic data · not audited.** All inputs are the synthetic Lindström × Since AI data pack. Baseline factors are illustrative placeholders. Nothing in this prototype is audited, verified or suitable for CSRD or other regulatory reporting.
 
-This note describes what the code does (`metrics/`, `config/assumptions/v1.yaml`, `config/metrics.yaml`). Only the metric engine produces numbers. The dashboard, the PPTX and the AI layer read one `ReviewModel`; the AI never writes a figure.
+This note describes what the code does (`metrics/`, `config/assumptions/v1.yaml`, `config/metrics.yaml`, `config/service_catalogue.yaml`, `config/relatable.yaml`, `ai/intel.py`). Only the metric engine produces numbers. The dashboard, the PowerPoint, PDF and Excel exports, the pitch deck and the AI layer read one `ReviewModel`; the AI never writes a figure.
 
 ## 1. Boundary
 
-- **In scope:** the Lindström textile rental service delivered to the selected customer account and its sites (in the pack: workwear only).
+- **In scope:** the Lindström textile rental service delivered to the selected customer account and its sites (in the pack: workwear only; the synthetic extension pack adds mats, see section 14). A service-line filter restricts every metric to one service line.
 - **Footprint:** laundry fresh water, process energy and process CO2e, plus delivery CO2e, allocated to the customer by washed kg (section 4).
 - **Baseline:** the selected alternative way of doing the same washing (section 2), applied to the same washed kg.
 - **Handprint:** repairs completed and the product replacements they may postpone (section 6). Shown separately.
@@ -111,8 +111,95 @@ Two further checks run as WARNING: C2 (a site's primary laundry matches the laun
 - The intent parser maps a typed request to priorities, customer, baseline, sensitivity and view. Unknown ids are dropped. If nothing is recognised the view stays unchanged and the message starts "Not recognised". A keyword matcher is the fallback.
 - The narrator drafts the executive summary and 5 discussion points. It must write numbers only as placeholders (for example `{{co2_saving_kg.base}}`), which the renderer fills from the `ReviewModel`. A guard rejects any text with a digit outside a placeholder, an unknown placeholder, or a banned phrase ("carbon neutral", "net zero", "CSRD-compliant", "audited", "verified", "guaranteed"). On rejection it retries once, then uses the template narrative. Each narrative block records `generated_by` as `llm` or `template`.
 - With no API key, `VR_AI=off`, a timeout (15 s) or repeated guard failure, the template narrative is served and the product behaves the same apart from the wording.
+- Account intelligence (section 17) is separate research on a real public company; no engine number is mixed in.
 
-## 12. Limitations
+## 12. Service vs do-it-yourself (`metrics/dto.py`)
+
+What the customer would spend doing the same itself under the **selected baseline**, line by line, in EUR, plus the staff hours the service frees. Every figure is `ESTIMATED` with a low/base/high range. Euros, hours and CO2e are kept separate and never summed into one score.
+
+**Inputs ("Your numbers").** Defaults live in `config/assumptions/v1.yaml` under `dto_inputs` (illustrative Nordic values, confidence Low). The account manager can overwrite any of them per account (`PUT /accounts/{id}/inputs`). An entered value applies to low, base and high unless the KAM also enters `<key>_low` / `<key>_high`. Each input shows its source: default (with its assumption id) or entered by the account manager, with the date.
+
+| Id | Input | Default (low – high) |
+|---|---|---|
+| — | Lindström contract price (EUR/year) | **none**: no net comparison until entered |
+| T4 | Local laundry price | 2.5 (1.8 – 3.5) EUR/kg |
+| T5 | Energy price | 0.15 (0.10 – 0.25) EUR/kWh |
+| T6 | Water price | 4 (3 – 6) EUR/m³ |
+| T7 | Detergent & chemicals | 0.05 (0.03 – 0.08) EUR/kg |
+| T8 | Staff cost | 30 (25 – 40) EUR/h |
+| T9 | Washing & handling time (in-house / home) | 3 (2 – 5) min/kg |
+| T10 | Garment admin time without service | 4 (2 – 8) h/site/month |
+| T11 | Garment life without repair service | 2 (1.5 – 3) years |
+
+**Lines** (period-scaled; `m` = months in the period):
+
+- **Garment purchases** = garments allocated (period end) × purchase cost weighted by allocated pieces per product ÷ garment life without repair (T11) × m/12.
+- **Extra replacements without repairs** = Σ over products of repairs × replacements per repair (T1) × product purchase cost. **Shown for explanation, not added to the total**: garment purchases already use the shorter no-repair life, so adding these would count the same garments twice.
+- **Washing cost**, by baseline:
+  - B_LOCAL: washed kg × local laundry price (T4);
+  - B_INHOUSE and B_HOME: washed kg × (baseline kWh/kg × s × energy price (T5) + baseline l/kg × s ÷ 1000 × water price (T6) + detergent (T7)), with s the sensitivity factor (T1).
+- **Staff washing & handling time** (B_INHOUSE) or **Employee time, if washing happens on paid time** (B_HOME) = washed kg × handling min/kg (T9) ÷ 60 × staff cost (T8). Only the selected baseline's formula is applied, so nothing is counted twice.
+- **Garment admin** = sites with activity × admin h/site/month (T10) × m × staff cost (T8).
+- **Do-it-yourself total** = the sum of the lines in the total. If a line has no data, the total is marked partial.
+- **Net** = do-it-yourself total − contract price, **only if a contract price was entered**. Otherwise the page says "Enter the contract price to see the net comparison".
+
+**Ranges.** low = the cheapest do-it-yourself case: every input at the end that minimises the cost (for garment life, the longest life) and the low sensitivity (baseline factors × 0.85, also applied to the kWh/kg and l/kg in the washing formula; 0.25 replacements per repair). high = the opposite. This mirrors the savings: the low end is the smallest benefit for Lindström.
+
+**Convenience.** Staff hours freed = washing/handling hours (in-house, home) + admin hours, plus the existing on-time rate, utilisation and service requests per 100 wearers. For Food & Beverage and Healthcare a qualitative hygiene note is shown ("context, not compliance advice"). **Environment** uses the existing savings (section 3).
+
+Example (NorthStar, 2025, B_LOCAL, defaults, all synthetic): do-it-yourself total about 1,957,510 EUR (1,363,310 – 2,739,773 EUR); staff hours freed 1,152 h (24 sites × 4 h × 12 months). Extra replacements without repairs, 660,082 EUR, are shown but not in the total.
+
+The inputs enter the review's `run_id` (a hash of the effective inputs), so narrative caches and exports refresh when they change. The customer audience sees the inputs read-only; the edit form is for the account manager only (enforced in the UI; no auth in the prototype).
+
+## 13. Growth opportunities (`metrics/growth.py`)
+
+The extra value if the customer moves more to Lindström. The account manager enters up to three levers (stored with the inputs): `extra_sites`, `extra_wearers` and `extra_service_lines` (from the service catalogue), plus an optional `expansion_price_eur_per_site_year`. Every figure is per year (period values × 12 ÷ months), `ESTIMATED`, with a low/base/high range in the same direction as section 12. Sizing is account-wide (review filters do not apply). For each lever and in total it shows: do-it-yourself cost avoided (EUR), staff hours freed, CO2e saving and water saving, never one combined score.
+
+- **More sites:** each current figure ÷ current sites × extra sites.
+- **More employees:** each current figure ÷ current active wearers × extra wearers. Garment admin is driven by sites, not wearers, so it is excluded from the per-wearer cost and hours. If both sites and employees are entered, a note warns that the two may overlap.
+- **A service line not yet used:** typical kg per site per month from `config/service_catalogue.yaml` × (current + extra sites) × 12, valued with the baseline's do-it-yourself washing cost per kg and the account's own CO2e and water saving per washed kg; staff hours use the handling time (T9) only when the baseline has customer-side washing. **A line the customer already uses is skipped** and listed as "already used by this customer".
+- **Net:** only when an expansion price was entered: cost avoided − Lindström price (per site and year × extra sites; per wearer derived from the per-site price; for a service line, kg × the catalogue price per kg, with the conservative low end using the high price).
+
+Service catalogue defaults (illustrative, confidence Low):
+
+| Id | Service line | Typical kg/site/month (low – high) | Typical price EUR/kg (low – high) |
+|---|---|---|---|
+| T12 | Workwear | 1,500 (800 – 2,500) | 3.0 (2.2 – 4.0) |
+| T13 | Mats | 100 (50 – 200) | 4.0 (3.0 – 5.5) |
+| T14 | Washroom | 60 (30 – 120) | 3.5 (2.5 – 5.0) |
+| T15 | Cleanroom | 200 (100 – 400) | 8.0 (6.0 – 12.0) |
+| T16 | Hospitality textiles | 2,000 (1,000 – 4,000) | 1.8 (1.4 – 2.5) |
+
+The narrative line is code-filled: "Bringing {levers} on board would avoid about {range} a year in laundry and garment costs and save {CO2e range}."
+
+## 14. Mats (T3)
+
+Mats are washed by kg in the same laundries, so per-kg allocation applies. Assumption **T3** (confidence Low): mats use the same per-kg baseline factors as workwear; replace with mat-specific factors for production. Mats rows carry `active_wearers = 0`, so wearer de-duplication (T2) is unaffected when workwear rows exist, and per-wearer metrics for a Mats-only filter are `None` ("No data for this filter"). This is expected, not an error.
+
+## 15. Relatable comparisons (`config/relatable.yaml`)
+
+The customer story turns two savings into everyday terms: value ÷ factor, rounded to 2 significant figures, prefixed "≈" and always labelled "illustrative comparison". They are never inputs to a calculation.
+
+| Metric | Factor | Derivation | Sources |
+|---|---|---|---|
+| Water saving | 100,156 l per Finnish household per year | 140 l per person per day × 365 × 1.96 persons per household | Motiva figure as quoted by Cozify; Statistics Finland (household size 2020) |
+| CO2e saving | 1,908.2 kg CO2 per average Finnish passenger car per year | 136.3 g/km × 14,000 km | Traficom average via OpenCO2.net (2025); Traficom emissions calculator default mileage |
+
+Example (NorthStar, 2025, B_LOCAL): ≈ 14 households' yearly water use and ≈ 130 cars' CO₂ for a year.
+
+## 16. Customer story and Simple mode
+
+The landing page shows up to five cards (value delivered, versus doing it yourself, biggest improvement, growth opportunity, what's next). Each statement is a template filled from the `ReviewModel` ("about X (between A and B)"), with a "What to say" line for the account manager. Simple mode (the default) replaces status badges with one "estimate" pill and hides z-scores, lineage and formulas; Expert mode shows everything. Ranges are visible in both.
+
+## 17. Account intelligence guardrails (`ai/intel.py`)
+
+- **Live path:** Claude (`claude-sonnet-5-5`) with the Anthropic server-side web search tool (at most 5 searches, 60 s overall timeout), asked for recent public sources. The answer must come through a `submit_report` tool with a JSON schema.
+- **Code-side filtering:** a claim is kept only if its source URL was **actually returned by the web search** in that session, is a safe http(s) address, and has a date (YYYY, YYYY-MM or YYYY-MM-DD). A "How Lindström can help" item is kept only if it names an offer in `config/service_catalogue.yaml` and cites at least one such searched source. If no sourced claim survives, the report is rejected. The sources list always covers every cited URL. The disclaimer is always the code's own.
+- **No engine numbers** are mixed in, and the report never claims the company is a Lindström customer ("Example public company; no relationship with Lindström is implied").
+- **Cache and fallback:** live results are cached per company for 7 days (`data/intel_cache/`, gitignored). With no API key, `VR_AI=off`, or a failed call, the committed snapshot is served (Fazer Group, researched 2026-11-07, every claim with its source and date). The **snapshot chips and the page's automatic first open request the snapshot directly and never call the API**; only the Research button can start live research.
+- The fictional customers (NorthStar, Apex, Mediora) have no public footprint; the page says so and offers the example company. In production the account's legal name would come from CRM.
+
+## 18. Limitations
 
 - All data is synthetic. Figures illustrate the method and are not claims about Lindström or any customer.
 - Baseline factors are illustrative and need approval or replacement by customer-specific or public emission factors before external use.
@@ -123,4 +210,10 @@ Two further checks run as WARNING: C2 (a site's primary laundry matches the laun
 - "On time" uses the pack's `LATE` flag as supplied; its definition is unconfirmed.
 - Idle stock value (`idle_stock_value_eur`) is an internal estimate, not customer-facing. It is hidden when the audience is set to customer and absent from the PPTX.
 - Delivery-customer level of the hierarchy is missing in the pack, so sites hang directly under the account.
+- The do-it-yourself defaults (T4–T11) and the service catalogue sizing (T12–T16) are illustrative, not market data. The comparison is only as good as the inputs; the customer should check them. The net comparison depends entirely on the contract price entered.
+- Growth sizing scales the customer's current averages; new sites or employees may differ, and the site and employee levers can overlap.
+- Mats use workwear baseline factors (T3). Cross-border delivery (the Estonian hotels served from Turku) is not distance-modelled; delivery emissions are allocated per kg (A003).
+- The inputs API has no authentication in the prototype; the edit form is hidden from the customer view in the UI only.
+- Account intelligence is AI-generated from public sources and can be incomplete or out of date: verify before use. It is not advice about the company.
+- Relatable comparisons are illustrative only.
 - Not audited. Not suitable for CSRD or other regulatory reporting. Wording rules require "saved" or "avoided" to be qualified as "vs {baseline} (estimate)".

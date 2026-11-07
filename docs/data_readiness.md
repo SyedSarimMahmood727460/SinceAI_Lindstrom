@@ -21,7 +21,14 @@ Status key: **Ready** = the pack field maps cleanly and the real source is expec
 | Waste routes | `Waste_Circularity` (recycling, reuse, energy recovery, incineration kg) | Laundry waste reporting | Partial | Attributed to the customer by washed-kg share (A003). Baseline assumes 100% mixed waste (A004). |
 | Product footprints and cost | `Products` (`synthetic_product_footprint_kgco2e`, `synthetic_purchase_cost_eur`, weight) | Product master data and LCA | Gap | Synthetic (A005, confidence Low). Idle stock value is internal only until cost metrics are approved (Q20). |
 | Baseline factors | `Baselines` (via the assumption set `config/assumptions/v1.yaml`) | Approved public or customer-specific emission factors | Gap | Illustrative values; need approval before external use. Baseline choice to confirm with the customer (A001, Q10). |
-| Assumption register | `Assumptions` (A001-A008) plus team T1, T2 | Governed assumption set owned by Lindström sustainability | Partial | Versioned YAML in this prototype; needs an owner and an approval process. |
+| Assumption register | `Assumptions` (A001-A008) plus team T1–T16 | Governed assumption set owned by Lindström sustainability | Partial | Versioned YAML in this prototype; needs an owner and an approval process. |
+| Service line per product | `Products.service_line` (pack: Workwear only); extension pack `products.csv` (Mats) | Product master data | Partial | Drives the service-line filter, `meta.service_lines` and the growth "already used" check. Needs one governed list of service-line names across countries. Mats baseline factors are borrowed from workwear (T3). |
+| Industry and segment per customer | `Customers.industry`, `segment`, `priority_topics` | CRM / customer master data | Partial | Drives the industry rules (`config/industry_rules.yaml`). A new industry needs a rule (priority order, emphasis, topic map); without one the review uses the customer's own topics, or a general overview. Industry names must match the rule keys. |
+| Country per site | `Sites.country` (pack: FI, SE, PL; extension: EE) | Customer master data | Ready | Shown in the header, site table and fit page. Cross-border delivery is not distance-modelled. |
+| Lindström contract price | None (typed by the account manager) | Contract / billing system (ERP) | Gap | Without it there is no net comparison and no growth net figure. Production should read the annual contract value per account (and an expansion price list) instead of manual entry. |
+| Customer's own costs (do-it-yourself inputs T4–T11) | None (illustrative defaults; the account manager can overwrite) | The customer, in the review meeting; public price statistics for defaults | Gap | Local laundry price, energy, water, detergent, staff cost, handling and admin time, garment life. Defaults need a governed source per country. |
+| Service catalogue sizing (T12–T16) | `config/service_catalogue.yaml` (illustrative) | Lindström product management: typical volumes and price lists per service line | Gap | Typical kg per site per month and price per kg for growth sizing. |
+| Customer legal name and website (account intelligence) | None: the pack's customers are fictional | CRM (legal entity name, business ID, website) | Gap | Live research needs the real legal name. The demo uses a real public company (Fazer Group) as an example, with no relationship implied. |
 
 Not ingested as data, used as test reference only: `Customer_Impacts`, `Sample_Output`, and the derived columns of `Repairs`.
 
@@ -41,7 +48,7 @@ Customer kg routed to laundry L003 (Nordic Malmö WWS) in 2025 is 335,824 kg, ag
 
 | Tier | Source | What it adds | Approval needed |
 |---|---|---|---|
-| **0** | Synthetic Excel pack (built, `adapters/excel_pack.py`) | End-to-end demo; all values `SYNTHETIC`. | None |
+| **0** | Synthetic Excel pack (built, `adapters/excel_pack.py`) and the synthetic CSV extension pack (built, `adapters/csv_pack.py`, `data/extension_pack/`) | End-to-end demo, including a new customer, industry, country and service line; all values `SYNTHETIC`. | None |
 | **1** | Scheduled BI / eLindström exports of the same fields (CSV or Excel) for one real pilot customer | First `APPROVED_REAL` values; checks C1-C3 and quarantine run on real rows; measured fields can move from `CALCULATED` to `MEASURED` where the source is a system of record. | Data owner sign-off per field; customer consent |
 | **2** | Governed warehouse / data platform with a stable schema | Scheduled loads, history, many customers; same canonical model, no change after the adapters. | Platform access; data governance |
 | **3** | Embedded in eLindström as a module or API consumer of the review service; optional extra service lines | Customer self-service views; service lines beyond workwear; more countries and industries via config. | Product ownership; security review; wording and claims approval |
@@ -54,5 +61,7 @@ Production would also need authentication and tenancy, approved emission factors
 2. Return the eight canonical frames named in `model/load.py` (`TABLES`): `org_node`, `product`, `laundry`, `fact_service_month`, `fact_service_cycle`, `fact_repair_month`, `fact_laundry_month`, `fact_waste_month`. Columns follow `model/ddl.sql`. Waste is one row per laundry × month × route.
 3. Tag every fact row with `method_status` (use `MEASURED` only for system-of-record readings), `provenance` (`APPROVED_REAL` only after approval), `source_id` and `load_id`.
 4. Do not clean data in the adapter. Rows are validated afterwards by `model/validate.py` (ERROR to quarantine) and the consistency checks (WARNING to `dq_flags`). Add rules there if the source introduces new keys.
-5. Call the adapter from `load_pack` in `model/load.py` and register its row in the `source` table (`tier`, `approved`).
-6. Add a test that loads a small fixture and checks quarantine and flags. The metric engine, insight rules, API, dashboard and PPTX need no change.
+5. Register the adapter type once in `_build_adapters` in `model/load.py`, then list each source in `config/sources.yaml` (`id`, `adapter`, `path`, `enabled`, optional `toggle_env`). `load_sources` loads every enabled source, writes one row per source to the `source` table (`tier`, `approved`) and runs validation, quarantine and C1–C3 over the union. Ids must be unique across sources; a duplicate from a later source is quarantined.
+6. Add a test that loads a small fixture and checks quarantine and flags. The metric engine, insight rules, API, dashboard and exports need no change.
+
+If the new source has the same shape as the pack's sheets (for example a Tableau export saved as CSV), no new adapter is needed: point a `csv` entry in `config/sources.yaml` at the folder. This is how the extension pack and the proof test (`tests/test_extensibility.py`: Washroom, Restaurants, Latvia) are loaded. See the worked example in the README.
