@@ -237,6 +237,11 @@ def config_modules():
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+@app.get("/config/glossary")
+def config_glossary():
+    return load_yaml("glossary.yaml")["terms"]
+
+
 @app.get("/config/internal-metrics")
 def config_internal_metrics():
     """Metric ids that are never customer-facing (the dashboard hides their modules)."""

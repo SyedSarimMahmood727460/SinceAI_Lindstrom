@@ -14,6 +14,7 @@ from api.review_model import (
 from config.loader import load_assumptions, load_yaml
 from insights.discussion import action_rows, discussion_points
 from insights.priorities import resolve_priorities
+from insights.story import build_story
 from insights.rules import _weight, build_observations
 from metrics.dto import compute_dto
 from metrics.engine import Engine
@@ -259,5 +260,6 @@ def build_review(con, params: ReviewParams, engine: Engine | None = None,
         comparisons={"baselines": bl}, circularity=circ, observations=obs,
         narrative=Narrative(exec_summary="", discussion_points=[], generated_by="template"),
         actions=actions, methodology=methodology, data_quality=data_quality, dto=dto)
+    review.story = build_story(review)
     review.narrative = _narrate(review, use_ai)
     return review

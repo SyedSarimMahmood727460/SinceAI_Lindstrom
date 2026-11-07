@@ -10,6 +10,7 @@ from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Emu, Inches, Pt
 
 from export import charts
+from export.format import _scale, fmt_number, fmt_range, fmt_value  # noqa: F401  (re-exported)
 
 NAVY = RGBColor(0x1B, 0x2A, 0x4A)
 RED = RGBColor(0xD7, 0x19, 0x20)
@@ -33,51 +34,6 @@ SITE_METRIC = {"water": ("washed_kg_per_wearer", False), "emissions": ("co2_savi
 
 
 # ---------------------------------------------------------------- formatting
-
-def _scale(value: float, unit: str) -> tuple[float, str, int, float]:
-    """Return (scaled value, display unit, decimals, divisor) chosen from the headline `value`."""
-    a = abs(value)
-    if unit == "l" and a >= 100_000:
-        return value / 1000, "m³", 0, 1000
-    if unit == "kWh" and a >= 100_000:
-        return value / 1000, "MWh", 0, 1000
-    if unit == "kgCO2e" and a >= 10_000:
-        return value / 1000, "t CO2e", 1, 1000
-    if unit == "kgCO2e":
-        return value, "kg CO2e", 0, 1
-    if unit == "ratio":
-        return value * 100, "%", 1, 0.01
-    if unit == "%":
-        return value, "%", 1, 1
-    if unit == "h" or unit.startswith("per 100") or unit == "kg/wearer":
-        return value, unit, 1, 1
-    return value, unit, 0, 1
-
-
-def fmt_number(value: float | None, unit: str) -> str:
-    if value is None:
-        return "n/a"
-    v, u, dec, _ = _scale(value, unit)
-    num = f"{v:,.{dec}f}"
-    if u == "%":
-        return f"{num}%"
-    return f"{num} {u}" if u and u != "count" else num
-
-
-def fmt_value(metric) -> str:
-    """Formatted headline value of a MetricResult/Kpi (shared by the builder and tests)."""
-    return fmt_number(metric.value, metric.unit)
-
-
-def fmt_range(metric) -> str:
-    r = metric.range
-    if r is None or r.low is None or r.high is None or metric.value is None:
-        return ""
-    _, u, dec, div = _scale(metric.value, metric.unit)
-    lo, hi = r.low / div, r.high / div
-    suffix = "%" if u == "%" else (f" {u}" if u else "")
-    return f"{lo:,.{dec}f} – {hi:,.{dec}f}{suffix}"
-
 
 def tag(metric) -> str:
     return f"[{metric.method_status.value}]" + (f" {WARN}" if metric.dq_warning else "")

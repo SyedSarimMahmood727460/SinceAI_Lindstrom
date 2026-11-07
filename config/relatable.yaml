@@ -1,0 +1,27 @@
+# Relatable comparisons for the customer story cards (illustrative only; never a measured figure).
+# Text = metric value / factor, rounded to 2 significant figures, prefixed "≈".
+# `metric` is the engine metric the factor applies to; `factor` is in that metric's unit.
+- id: household_water_year
+  metric: water_saving_l
+  factor: 100156
+  unit: l per household per year
+  label_template: "{n} Finnish households' yearly water use"
+  label_one: "one Finnish household's yearly water use"
+  derivation: "140 l per person per day x 365 days x 1.96 persons per household = 100,156 l"
+  source_url: https://en.cozify.fi/blogs/blog/measuring-water-consumption-opportunities-for-the-owner-developer-and-resident
+  source_urls_extra:
+    - https://stat.fi/til/asas/2020/01/asas_2020_01_2021-10-14_kat_002_en.html
+  source_note: "140 l per inhabitant per day (Motiva, as quoted by Cozify); 1.96 persons per household-dwelling unit in 2020 (Statistics Finland)."
+  note: illustrative comparison
+- id: car_co2_year
+  metric: co2_saving_kg
+  factor: 1908.2
+  unit: kg CO2 per car per year
+  label_template: "{n} average Finnish passenger cars' CO₂ for a year"
+  label_one: "one average Finnish passenger car's CO₂ for a year"
+  derivation: "136.3 g CO2 per km (fleet average, use phase, NEDC-based) x 14,000 km per year = 1,908.2 kg"
+  source_url: https://www.openco2.net/en/emission-factor/3507/
+  source_urls_extra:
+    - https://tieto.traficom.fi/sites/default/files/media/file/PASSENGER%20CARS_USER%20MANUAL%20AND%20BASIS%20OF%20CALCULATION.pdf
+  source_note: "136.3 g/km average car in Finland (Traficom, published by OpenCO2.net, 2025); 14,000 km per year default (Traficom emissions calculator, citing Statistics Finland 2019)."
+  note: illustrative comparison

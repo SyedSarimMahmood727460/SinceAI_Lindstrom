@@ -1,0 +1,10 @@
+# Plain-language definitions (max 30 words each) for the dashboard and customer conversations.
+terms:
+  - {id: baseline, term: Baseline, definition: "The 'what would have happened otherwise' case, such as washing the textiles yourself. Savings are measured against it, so choosing the baseline changes the result."}
+  - {id: allocation, term: Allocation, definition: "A laundry serves many customers, so its water, energy and emissions are shared out in proportion to the kilos each customer's textiles weighed."}
+  - {id: scope3, term: Scope 3, definition: "Greenhouse gas emissions that happen in a company's supply chain rather than in its own buildings. Laundry services usually count as Scope 3 for the customer."}
+  - {id: utilisation, term: Utilisation, definition: "The share of the garments you have been given that were actually worn and scanned. Low utilisation means garments sit unused and the stock may be too large."}
+  - {id: range_sensitivity, term: Range / sensitivity, definition: "Estimates depend on assumptions. We show a low, base and high case so you can see how much the answer moves if the assumptions change."}
+  - {id: estimate, term: Estimate, definition: "A figure that rests on assumptions rather than direct measurement. It is shown with its range and should be read as a realistic guide, not an exact result."}
+  - {id: repair_handprint, term: Repair handprint, definition: "The positive effect of repairing garments instead of replacing them: the new garments, and their footprint, that did not have to be made."}
+  - {id: data_consistency_warning, term: Data-consistency warning, definition: "A flag that two data sources disagree, for example reported kilos versus a laundry's total. Figures for the affected period should be treated with extra care."}
