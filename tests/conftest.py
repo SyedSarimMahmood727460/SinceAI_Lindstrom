@@ -28,6 +28,18 @@ def con(pack_path):
     return load_pack(pack_path)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _inputs_dir(tmp_path_factory):
+    """Account-manager inputs go to a session temp dir: tests never write into the repo."""
+    old = os.environ.get("VR_INPUTS_DIR")
+    os.environ["VR_INPUTS_DIR"] = str(tmp_path_factory.mktemp("kam_inputs"))
+    yield
+    if old is None:
+        os.environ.pop("VR_INPUTS_DIR", None)
+    else:
+        os.environ["VR_INPUTS_DIR"] = old
+
+
 @pytest.fixture(autouse=True)
 def _no_llm_by_default(monkeypatch, tmp_path):
     """No test touches the network: AI is off and logs go to a temp dir unless a test opts in."""

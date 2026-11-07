@@ -8,7 +8,7 @@ import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -18,6 +18,7 @@ from api.review_model import ReviewParams
 from config.loader import CONFIG_DIR, load_assumptions, load_yaml
 from metrics.engine import Engine
 from model.contracts import ViewSpec
+from model.inputs_store import effective_inputs, load_inputs, save_inputs
 from model.load import load_sources
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -104,6 +105,35 @@ def review(account_id: str, period: str = "2025", product: str | None = None,
     except ValueError as e:
         raise HTTPException(422, str(e))
     return _review(params).model_dump(mode="json")
+
+
+def _inputs_spec() -> dict:
+    return state.engine.assumptions["dto_inputs"]
+
+
+@app.get("/accounts/{account_id}/inputs")
+def get_inputs(account_id: str):
+    """Effective service vs do-it-yourself inputs: defaults unless the KAM entered a value."""
+    with state.lock:
+        if not _account_exists(account_id):
+            raise HTTPException(404, f"unknown account: {account_id}")
+    spec = _inputs_spec()
+    return effective_inputs(load_inputs(account_id, spec), spec)
+
+
+@app.put("/accounts/{account_id}/inputs")
+def put_inputs(account_id: str, body: dict = Body(...)):
+    """Replace the account's entered inputs (no auth in the prototype; the UI shows the form to
+    account managers only). 422 for unknown keys, non-numbers, negatives or low > high."""
+    with state.lock:
+        if not _account_exists(account_id):
+            raise HTTPException(404, f"unknown account: {account_id}")
+        spec = _inputs_spec()
+        try:
+            stored = save_inputs(account_id, body, spec)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+    return effective_inputs(stored, spec)
 
 
 class IntentRequest(BaseModel):

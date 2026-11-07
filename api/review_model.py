@@ -69,6 +69,25 @@ class SiteEntry(BaseModel):
     outlier_flags: list[str] = Field(default_factory=list)
 
 
+class DtoLine(BaseModel):
+    id: str
+    label: str
+    diy: MetricResult
+
+
+class Dto(BaseModel):
+    """Service vs do-it-yourself comparison (design §8a.4 item 4). € lines, hours and the
+    environment metrics stay separate; `net` exists only when a contract price was entered."""
+    baseline: str
+    inputs: list[dict[str, Any]]
+    lines: list[DtoLine]
+    diy_total: MetricResult
+    contract_price: MetricResult | None = None
+    net: MetricResult | None = None
+    convenience: dict[str, MetricResult | None]
+    hygiene_note: str | None = None
+
+
 class ReviewModel(BaseModel):
     meta: Meta
     context: Context
@@ -82,3 +101,4 @@ class ReviewModel(BaseModel):
     actions: list[dict[str, Any]]
     methodology: dict[str, Any]
     data_quality: dict[str, Any]
+    dto: Dto | None = None

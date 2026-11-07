@@ -60,5 +60,5 @@ def test_assumptions_config():
     a = load_assumptions()
     assert a["baselines"]["B_LOCAL"]["water_l_per_kg"] == 9.5
     assert [k for k, v in a["baselines"].items() if v["default"]] == ["B_LOCAL"]
-    assert [r["id"] for r in a["register"]] == [f"A00{i}" for i in range(1, 9)] + ["T1", "T2", "T3"]
+    assert [r["id"] for r in a["register"]] == [f"A00{i}" for i in range(1, 9)] + [f"T{i}" for i in range(1, 12)]
     assert a["sensitivity"]["low"] == {"baseline_factor": 0.85, "replacements_per_repair": 0.25}

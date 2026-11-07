@@ -72,7 +72,8 @@ def base_frames(con: duckdb.DuckDBPyConnection, account_id: str, months: list[st
 
     cycles = _fact(con, "fact_service_cycle", col, account_id, months, product, service_line)
     repairs = _fact(con, "fact_repair_month", col, account_id, months, product, service_line).merge(
-        products[["product_id", "footprint_kgco2e"]], on="product_id", how="left")
+        products[["product_id", "footprint_kgco2e", "purchase_cost_eur"]], on="product_id",
+        how="left")
     sites = con.execute(
         f"select * from org_node where level = 'SITE' and "
         f"{'parent_id' if col == 'customer_id' else 'node_id'} = ? order by node_id",

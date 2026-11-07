@@ -2,21 +2,24 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import statistics
 import threading
 from datetime import datetime, timezone
 
 from api.review_model import (
-    Context, Kpi, Meta, NodeInfo, ReviewModel, ReviewParams, SiteEntry,
+    Context, Dto, Kpi, Meta, NodeInfo, ReviewModel, ReviewParams, SiteEntry,
 )
 from config.loader import load_assumptions, load_yaml
 from insights.discussion import action_rows, discussion_points
 from insights.priorities import resolve_priorities
 from insights.rules import _weight, build_observations
+from metrics.dto import compute_dto
 from metrics.engine import Engine
 from metrics.periods import period_months
 from model.contracts import MetricResult, Narrative, Observation
+from model.inputs_store import effective_inputs, load_inputs
 
 TREND_IDS = ["active_wearers", "garments_allocated", "active_assets_scanned", "repairs",
              "service_requests", "late_cycles"]
@@ -76,6 +79,18 @@ def _select(m: MetricResult, sensitivity: str) -> MetricResult:
     if m.range is not None and getattr(m.range, sensitivity) is not None:
         return m.model_copy(update={"value": getattr(m.range, sensitivity)})
     return m
+
+
+def _select_dto(dto: dict, sensitivity: str) -> Dto:
+    """The selected sensitivity picks every DTO headline value (like the KPIs)."""
+    for line in dto["lines"]:
+        line["diy"] = _select(line["diy"], sensitivity)
+    for k in ("diy_total", "contract_price", "net"):
+        if dto[k] is not None:
+            dto[k] = _select(dto[k], sensitivity)
+    conv = dto["convenience"]
+    conv["staff_hours_freed"] = _select(conv["staff_hours_freed"], sensitivity)
+    return Dto(**dto)
 
 
 def _visible(metrics: dict[str, MetricResult], audience: str) -> dict[str, MetricResult]:
@@ -173,6 +188,15 @@ def build_review(con, params: ReviewParams, engine: Engine | None = None,
     bl = engine.baseline_comparison(acc, params.period, params.product, sl)
     circ = engine.circularity(acc, params.period, params.product, sl)
 
+    # service vs do-it-yourself (account-manager inputs; customers see them read-only)
+    spec = assumptions["dto_inputs"]
+    inputs = effective_inputs(load_inputs(acc, spec), spec)
+    dto = _select_dto(compute_dto(engine, acc, params.period, params.product, sl,
+                                  params.baseline_id, inputs, assumptions, results=account_all),
+                      sens)
+    inputs_hash = hashlib.sha256(
+        json.dumps(inputs, sort_keys=True).encode("utf-8")).hexdigest()[:8]
+
     # meta
     countries = sorted({r[2] for r in site_rows if r[2]})
     srows = con.execute(
@@ -182,7 +206,8 @@ def build_review(con, params: ReviewParams, engine: Engine | None = None,
     sources = [{"source_id": r[0], "tier": r[1], "provenance": r[2] or "SYNTHETIC"} for r in srows]
     load_ids = "|".join(sorted({r[3] for r in srows if r[3]}))
     run_id = hashlib.sha256(
-        f"{load_ids}|{assumptions.get('version')}|{params.model_dump_json()}".encode("utf-8")
+        f"{load_ids}|{assumptions.get('version')}|{params.model_dump_json()}|{inputs_hash}"
+        .encode("utf-8")
     ).hexdigest()[:12]
     products = [{"id": r[0], "name": r[1]} for r in con.execute(
         "select distinct p.product_id, p.name from fact_service_month f "
@@ -210,6 +235,8 @@ def build_review(con, params: ReviewParams, engine: Engine | None = None,
     # methodology and data quality (data-driven from config)
     text = load_yaml("review_text.yaml")
     used = {a for k in kpis for a in k.assumptions}
+    used |= {a for x in dto.lines for a in x.diy.assumptions}
+    used |= set(dto.convenience["staff_hours_freed"].assumptions)
     methodology = {
         "boundary": list(text["boundary"]),
         "assumptions_used": [r for r in assumptions["register"] if r["id"] in used],
@@ -231,6 +258,6 @@ def build_review(con, params: ReviewParams, engine: Engine | None = None,
         meta=meta, context=context, kpis=kpis, sites=sites, trends=trends,
         comparisons={"baselines": bl}, circularity=circ, observations=obs,
         narrative=Narrative(exec_summary="", discussion_points=[], generated_by="template"),
-        actions=actions, methodology=methodology, data_quality=data_quality)
+        actions=actions, methodology=methodology, data_quality=data_quality, dto=dto)
     review.narrative = _narrate(review, use_ai)
     return review

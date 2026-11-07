@@ -37,6 +37,17 @@ sensitivity:
   high:
     baseline_factor: 1.15
     replacements_per_repair: 1.0
+dto_inputs:
+  # Service vs do-it-yourself inputs (design 8a): default, low, high; illustrative Nordic values.
+  # The account manager may override any of them per account (data/kam_inputs/).
+  local_laundry_eur_per_kg: {label: Local laundry price, unit: EUR/kg, default: 2.5, low: 1.8, high: 3.5, assumption_id: T4}
+  energy_eur_per_kwh: {label: Energy price, unit: EUR/kWh, default: 0.15, low: 0.10, high: 0.25, assumption_id: T5}
+  water_eur_per_m3: {label: Water price, unit: EUR/m3, default: 4.0, low: 3.0, high: 6.0, assumption_id: T6}
+  detergent_eur_per_kg: {label: Detergent & chemicals, unit: EUR/kg, default: 0.05, low: 0.03, high: 0.08, assumption_id: T7}
+  labour_eur_per_h: {label: Staff cost, unit: EUR/h, default: 30.0, low: 25.0, high: 40.0, assumption_id: T8}
+  handling_min_per_kg: {label: Washing & handling time (in-house/home), unit: min/kg, default: 3.0, low: 2.0, high: 5.0, assumption_id: T9}
+  admin_h_per_site_month: {label: Garment admin time without service, unit: h/site/month, default: 4.0, low: 2.0, high: 8.0, assumption_id: T10}
+  garment_life_years_no_repair: {label: Garment life without repair service, unit: years, default: 2.0, low: 1.5, high: 3.0, assumption_id: T11}
 register:
 - id: A001
   assumption: Default comparison baseline
@@ -93,3 +104,43 @@ register:
   value_or_rule: Mats use the same per-kg baseline factors as workwear
   confidence: Low
   treatment: Replace with mat-specific factors for production
+- id: T4
+  assumption: Local laundry price (DIY input)
+  value_or_rule: 2.5 EUR/kg (1.8-3.5); illustrative Nordic values
+  confidence: Low
+  treatment: Editable by the account manager
+- id: T5
+  assumption: Energy price (DIY input)
+  value_or_rule: 0.15 EUR/kWh (0.10-0.25); illustrative Nordic values
+  confidence: Low
+  treatment: Editable by the account manager
+- id: T6
+  assumption: Water price (DIY input)
+  value_or_rule: 4 EUR/m3 (3-6); illustrative Nordic values
+  confidence: Low
+  treatment: Editable by the account manager
+- id: T7
+  assumption: Detergent & chemicals (DIY input)
+  value_or_rule: 0.05 EUR/kg (0.03-0.08); illustrative Nordic values
+  confidence: Low
+  treatment: Editable by the account manager
+- id: T8
+  assumption: Staff cost (DIY input)
+  value_or_rule: 30 EUR/h (25-40); illustrative Nordic values
+  confidence: Low
+  treatment: Editable by the account manager
+- id: T9
+  assumption: Washing & handling time (DIY input)
+  value_or_rule: 3 min/kg (2-5), in-house or home washing; illustrative Nordic values
+  confidence: Low
+  treatment: Editable by the account manager
+- id: T10
+  assumption: Garment admin time without service (DIY input)
+  value_or_rule: 4 h/site/month (2-8); illustrative Nordic values
+  confidence: Low
+  treatment: Editable by the account manager
+- id: T11
+  assumption: Garment life without repair service (DIY input)
+  value_or_rule: 2 years (1.5-3); illustrative Nordic values
+  confidence: Low
+  treatment: Editable by the account manager
