@@ -29,6 +29,13 @@ METRICS = {  # key -> (label, unit)
     "co2_saving_kg": ("CO2e saving vs baseline", "kgCO2e"),
     "water_saving_l": ("Water saving vs baseline", "l"),
 }
+# human labels for formula texts
+HUMAN = {"diy_cost_avoided": "do-it-yourself cost avoided", "staff_hours_freed": "staff hours freed",
+         "co2_saving_kg": "CO2e saving", "water_saving_l": "water saving"}
+ALREADY_USED = "already used by this customer"
+OVERLAP_NOTE = ("Sites and employees may overlap — don't add the two levers if the new sites "
+                "bring the new employees.")
+PARTIAL = "(based on partial data)"
 TAGS = {"diy_cost_avoided": "cost", "staff_hours_freed": "service",
         "co2_saving_kg": "emissions", "water_saving_l": "water"}
 OPPOSITE = {"low": "high", "base": "base", "high": "low"}
@@ -93,6 +100,15 @@ def compute_growth(engine, account_id: str, period: str, baseline_id: str, input
     price = g[GROWTH_PRICE_KEY]
     scope = Scope(node_id=account_id, level="ACCOUNT", period=period)
     cat = {c["id"]: c for c in catalogue}
+    used_lines = {r[0] for r in engine.con.execute(
+        "select distinct p.service_line from fact_service_month f "
+        "join product p on p.product_id = f.product_id where f.customer_id = ? "
+        "and p.service_line is not null", [account_id]).fetchall()}
+    skipped = [{"id": cid, "reason": ALREADY_USED} for cid in g["extra_service_lines"]
+               if cid in cat and cat[cid]["service_line"] in used_lines]
+    skipped_ids = {x["id"] for x in skipped}
+    partial = bool(dto["missing_lines"])
+    notes = [OVERLAP_NOTE] if g["extra_sites"] and g["extra_wearers"] else []
 
     def result(mid: str, key: str, label: str, vals: Ends, assumption_ids: list[str],
                formula: str, lineage_from: MetricResult | None, unit: str | None = None):
@@ -136,25 +152,37 @@ def compute_growth(engine, account_id: str, period: str, baseline_id: str, input
         charge = None if price is None else {e: price * n for e in SENSITIVITIES}
         levers.append(lever(
             "sites", f"{n} more site{'s' if n != 1 else ''}", vals, charge, ids,
-            {**{k: f"current {k} ÷ {sites:g} sites × {n} extra sites × 12 / {len(months)} "
-                   "months" for k in METRICS},
+            {**{k: f"current {HUMAN[k]} ÷ {sites:g} sites × {n} extra sites × 12 / "
+                   f"{len(months)} months" for k in METRICS},
              "charge": f"expansion price per site and year × {n}"}))
     if g["extra_wearers"] and wearers:
         n = g["extra_wearers"]
-        vals = {k: _map(lambda e, x: x / wearers * n * per_year, v) for k, v in cur.items()}
+        # garment admin is driven by sites, not wearers: excluded from the per-wearer averages
+        admin_eur = _ends(lines.get("admin"))
+        admin_h = {e: sites * by_key["admin_h_per_site_month"]["value" if e == "base" else e]
+                   * len(months) if sites else None for e in SENSITIVITIES}
+        per_wearer_base = {
+            **cur,
+            "diy_cost_avoided": _map(lambda e, t, a: t - a, cur["diy_cost_avoided"], admin_eur),
+            "staff_hours_freed": _map(lambda e, t, a: t - a, cur["staff_hours_freed"], admin_h)}
+        vals = {k: _map(lambda e, x: x / wearers * n * per_year, v)
+                for k, v in per_wearer_base.items()}
         # per-wearer price derived from the per-site price and current wearers per site
         charge = None if price is None or not sites else {
             e: price * sites / wearers * n for e in SENSITIVITIES}
         levers.append(lever(
             "wearers", f"{n:,} more employee{'s' if n != 1 else ''} on the service", vals,
             charge, ids,
-            {**{k: f"current {k} ÷ {wearers:g} active wearers × {n} extra wearers × 12 / "
+            {**{k: f"current {HUMAN[k]}"
+                   + (" excluding garment admin (driven by sites, not wearers)"
+                      if k in ("diy_cost_avoided", "staff_hours_freed") else "")
+                   + f" ÷ {wearers:g} active wearers × {n} extra wearers × 12 / "
                    f"{len(months)} months" for k in METRICS},
              "charge": f"expansion price per site and year × {sites:g} sites ÷ {wearers:g} "
                        f"wearers × {n}"}))
     for cid in g["extra_service_lines"]:
         c = cat.get(cid)
-        if c is None or not sites or not kg:
+        if c is None or cid in skipped_ids or not sites or not kg:
             continue
         n_sites = sites + g["extra_sites"]
         tk, tp = c["typical_kg_per_site_month"], c["typical_price_eur_per_kg"]
@@ -193,8 +221,10 @@ def compute_growth(engine, account_id: str, period: str, baseline_id: str, input
              "charge": f"{kgf} × typical Lindström price per kg ({aid})"},
             extra={"service_line": c["service_line"],
                    "lindstrom_offer_url": c["lindstrom_offer_url"]}))
-    if not levers:
-        return None
+    extra = {"inputs": g, "skipped_lines": skipped, "partial": partial, "notes": notes}
+    if not levers:  # e.g. every chosen line is already used: nothing to size
+        return {**extra, "levers": [], "totals": None, "narrative_line": None,
+                "statement": None, "what_to_say": None, "value_refs": []}
 
     totals = {}
     for key, (mlabel, _) in METRICS.items():
@@ -217,16 +247,21 @@ def compute_growth(engine, account_id: str, period: str, baseline_id: str, input
         del lv["_vals"], lv["_charge"]
 
     narrative = _narrative(levers, totals)
+    if partial:
+        narrative = narrative[:-1] + f" {PARTIAL}."
+    what_to_say = ("These are estimates per year, scaled from your own current data; the extra "
+                   "sites, employees and services are what we discussed — check they match "
+                   "your plans.")
+    if notes:
+        what_to_say += " " + " ".join(notes)
     return {
-        "inputs": g,
+        **extra,
         "levers": levers,
         "totals": totals,
         "narrative_line": narrative,
         # read by the customer story card (insights/story.py)
         "statement": narrative,
-        "what_to_say": "These are estimates per year, scaled from your own current data; "
-                       "the extra sites, employees and services are what we discussed — "
-                       "check they match your plans.",
+        "what_to_say": what_to_say,
         "value_refs": [m.metric_id for m in (totals["diy_cost_avoided"],
                                              totals["co2_saving_kg"]) if m.value is not None],
     }

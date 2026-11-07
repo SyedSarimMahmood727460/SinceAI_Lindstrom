@@ -1,4 +1,6 @@
 """Growth opportunities (metrics/growth.py, ReviewModel.growth, design §8b G7)."""
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -8,7 +10,7 @@ from api.review_model import ReviewParams
 from config.loader import load_assumptions, load_yaml
 from export.format import fmt_value
 from metrics.engine import Engine
-from metrics.growth import compute_growth
+from metrics.growth import OVERLAP_NOTE, compute_growth
 from model.inputs_store import save_inputs, validate_inputs
 
 A = load_assumptions()
@@ -55,11 +57,20 @@ def test_growth_sites_scales_linearly(engine):
         d["diy_total"].value / sites * 4)
 
 
+def _dto_now(engine, period="2025"):
+    from metrics.dto import compute_dto
+    from model.inputs_store import effective_inputs
+    return compute_dto(engine, "CUST001", period, None, None, "B_LOCAL",
+                       effective_inputs({}, SPEC), A)
+
+
 def test_growth_annualised_for_a_quarter(engine):
     q = _growth(engine, {"extra_sites": 4}, period="2025-Q2")
-    y = _growth(engine, {"extra_sites": 4})
-    # a quarter's averages × 4 are of the same order as the year's
-    assert 0.5 < q["totals"]["diy_cost_avoided"].value / y["totals"]["diy_cost_avoided"].value < 2
+    d = _dto_now(engine, "2025-Q2")
+    in_total = sum(x["diy"].value for x in d["lines"] if x["in_total"])
+    sites = engine.compute("CUST001", period="2025-Q2")["sites"].value
+    assert _lever(q, "sites")["diy_cost_avoided"].value == pytest.approx(
+        in_total / sites * 4 * 12 / 3, rel=1e-6)
 
 
 def test_growth_wearers(engine):
@@ -71,6 +82,65 @@ def test_growth_wearers(engine):
     g2 = _growth(engine, {"extra_wearers": 1000})
     assert _lever(g2, "wearers")["diy_cost_avoided"].value == pytest.approx(
         2 * lv["diy_cost_avoided"].value)
+    # garment admin (site-driven) is excluded from the per-wearer averages
+    d = _dto_now(engine)
+    lines = {x["id"]: x["diy"].value for x in d["lines"]}
+    wearers = engine.compute("CUST001", period="2025")["active_wearers"].value
+    assert lv["diy_cost_avoided"].value == pytest.approx(
+        (d["diy_total"].value - lines["admin"]) / wearers * 500)
+    assert lv["staff_hours_freed"].value == pytest.approx(0)  # B_LOCAL: admin hours only
+    assert "excluding garment admin" in lv["diy_cost_avoided"].formula_text
+    assert "diy_cost_avoided" not in lv["diy_cost_avoided"].formula_text
+    assert "do-it-yourself cost avoided" in lv["diy_cost_avoided"].formula_text
+    assert g["notes"] == []
+
+
+def test_growth_overlap_note(engine):
+    g = _growth(engine, {"extra_sites": 4, "extra_wearers": 100})
+    assert g["notes"] == [OVERLAP_NOTE]
+    assert OVERLAP_NOTE in g["what_to_say"]
+
+
+def test_growth_partial_data(engine, monkeypatch):
+    import metrics.growth as growth_mod
+    real = growth_mod.compute_dto
+
+    def partial(*a, **kw):
+        return {**real(*a, **kw), "missing_lines": ["garment_purchases"]}
+    monkeypatch.setattr(growth_mod, "compute_dto", partial)
+    g = _growth(engine, {"extra_sites": 4})
+    assert g["partial"] is True
+    assert g["narrative_line"].endswith(" (based on partial data).")
+    monkeypatch.undo()
+    assert _growth(engine, {"extra_sites": 4})["partial"] is False
+
+
+def test_growth_skips_lines_already_used(engine, pack_path):
+    g = _growth(engine, {"extra_service_lines": ["workwear"]})
+    assert g["levers"] == [] and g["totals"] is None and g["statement"] is None
+    assert g["skipped_lines"] == [{"id": "workwear", "reason": "already used by this customer"}]
+    g = _growth(engine, {"extra_sites": 4, "extra_service_lines": ["workwear", "mats"]})
+    assert [lv["id"] for lv in g["levers"]] == ["sites", "line:mats"]
+    assert [x["id"] for x in g["skipped_lines"]] == ["workwear"]
+    # the hotel (extension pack) already rents Mats
+    from model.load import load_sources
+    old = os.environ.get("VR_EXTENSIONS")
+    os.environ["VR_EXTENSIONS"] = "on"
+    try:
+        con = load_sources()
+    finally:
+        if old is None:
+            os.environ.pop("VR_EXTENSIONS", None)
+        else:
+            os.environ["VR_EXTENSIONS"] = old
+    try:
+        eng = Engine(con, A, load_yaml("metrics.yaml"))
+        h = compute_growth(eng, "CUST004", "2025", "B_LOCAL",
+                           {"values": {"extra_service_lines": ["mats", "washroom"]}}, A, CAT)
+        assert [x["id"] for x in h["skipped_lines"]] == ["mats"]
+        assert [lv["id"] for lv in h["levers"]] == ["line:washroom"]
+    finally:
+        con.close()
 
 
 def test_growth_new_line_mats(engine):
