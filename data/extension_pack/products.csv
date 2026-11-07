@@ -1,0 +1,3 @@
+product_id,product_name,product_group,service_line,avg_weight_kg,synthetic_product_footprint_kgco2e,synthetic_purchase_cost_eur,material_note
+P2001,Entrance Mat Standard,Mats,Mats,2.80,21.0,85,synthetic mat
+P2002,Logo Mat,Mats,Mats,3.50,26.5,140,synthetic mat

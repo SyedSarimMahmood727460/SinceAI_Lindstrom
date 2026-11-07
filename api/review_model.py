@@ -15,6 +15,7 @@ class ReviewParams(BaseModel):
     account_id: str
     period: str = "2025"
     product: str | None = None
+    service_line: str | None = None
     baseline_id: str = "B_LOCAL"
     sensitivity: Literal["low", "base", "high"] = "base"
     priorities: list[str] | None = None
@@ -41,6 +42,8 @@ class Meta(BaseModel):
     assumption_set_version: str
     sources: list[dict[str, Any]]
     products: list[dict[str, str]]
+    service_lines: list[str] = Field(default_factory=list)
+    service_line: str | None = None
     disclaimer: str = DISCLAIMER
 
 

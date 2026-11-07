@@ -196,14 +196,16 @@ class Engine:
 
     # ---- public API ----------------------------------------------------------------------
     def compute(self, node_id: str, period: str = "2025", product: str | None = None,
-                baseline_id: str = "B_LOCAL") -> dict[str, MetricResult]:
+                baseline_id: str = "B_LOCAL", service_line: str | None = None
+                ) -> dict[str, MetricResult]:
         level = self._level(node_id)
-        frames = base_frames(self.con, node_id, period_months(period), product)
+        frames = base_frames(self.con, node_id, period_months(period), product, service_line)
         return self._results(node_id, level, period, product, frames, baseline_id)
 
     def site_metrics(self, account_id: str, period: str = "2025", product: str | None = None,
-                     baseline_id: str = "B_LOCAL") -> dict[str, dict[str, MetricResult]]:
-        frames = base_frames(self.con, account_id, period_months(period), product)
+                     baseline_id: str = "B_LOCAL", service_line: str | None = None
+                     ) -> dict[str, dict[str, MetricResult]]:
+        frames = base_frames(self.con, account_id, period_months(period), product, service_line)
         return {
             sid: self._results(sid, "SITE", period, product, self._subset(frames, site_id=sid),
                                baseline_id)
@@ -212,12 +214,13 @@ class Engine:
 
     def monthly(self, account_id: str, metric_ids: list[str], period: str = "2025",
                 product: str | None = None, site_id: str | None = None,
-                baseline_id: str = "B_LOCAL") -> dict[str, list[dict]]:
+                baseline_id: str = "B_LOCAL", service_line: str | None = None
+                ) -> dict[str, list[dict]]:
         unknown = [m for m in metric_ids if m not in self.registry and m not in RAW_SERIES]
         if unknown:
             raise ValueError(f"unknown metric ids: {unknown}")
         months = period_months(period)
-        frames = base_frames(self.con, site_id or account_id, months, product)
+        frames = base_frames(self.con, site_id or account_id, months, product, service_line)
         base = self._baseline(baseline_id)
         out: dict[str, list[dict]] = {m: [] for m in metric_ids}
         for month in months:
@@ -231,8 +234,9 @@ class Engine:
         return out
 
     def baseline_comparison(self, node_id: str, period: str = "2025",
-                            product: str | None = None) -> list[dict]:
-        frames = base_frames(self.con, node_id, period_months(period), product)
+                            product: str | None = None,
+                            service_line: str | None = None) -> list[dict]:
+        frames = base_frames(self.con, node_id, period_months(period), product, service_line)
         rows = []
         for bid, b in self.assumptions["baselines"].items():
             v = _values(frames, b, *self._sens("base"))
@@ -242,8 +246,9 @@ class Engine:
                          "energy_saving_kwh": v.get("energy_saving_kwh")})
         return rows
 
-    def circularity(self, node_id: str, period: str = "2025", product: str | None = None) -> dict:
-        frames = base_frames(self.con, node_id, period_months(period), product)
+    def circularity(self, node_id: str, period: str = "2025", product: str | None = None,
+                    service_line: str | None = None) -> dict:
+        frames = base_frames(self.con, node_id, period_months(period), product, service_line)
         rep, act = frames["repairs"], frames["activity"]
         by_type = rep.groupby("repair_type").repair_count.sum()
         by_month = rep.groupby("month").repair_count.sum()
@@ -255,9 +260,10 @@ class Engine:
             "waste_routes": routes,
         }
 
-    def laundry_stats(self, account_id: str, period: str = "2025") -> list[dict]:
+    def laundry_stats(self, account_id: str, period: str = "2025",
+                      service_line: str | None = None) -> list[dict]:
         months = period_months(period)
-        act = base_frames(self.con, account_id, months, None)["activity"]
+        act = base_frames(self.con, account_id, months, None, service_line)["activity"]
         out = []
         for lid, rows in act.groupby("laundry_id"):
             name, = self.con.execute("select name from laundry where laundry_id = ?", [lid]).fetchone()

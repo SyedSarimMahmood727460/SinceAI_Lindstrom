@@ -86,6 +86,11 @@ def _build_adapters(config_path: Path) -> list:
             if not path.is_dir():
                 log.warning("source %s skipped: folder not found: %s", sid, path)
                 continue
+            missing = [f for f in ("customers.csv", "sites.csv", "products.csv")
+                       if not (path / f).is_file()]
+            if missing:
+                log.warning("source %s skipped: missing %s in %s", sid, ", ".join(missing), path)
+                continue
             adapters.append(CsvPackAdapter(path, source_id=sid))
         else:
             raise ValueError(f"unknown adapter '{kind}' for source {sid}")

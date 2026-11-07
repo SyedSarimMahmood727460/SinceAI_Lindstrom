@@ -93,13 +93,14 @@ def accounts():
 @app.get("/accounts/{account_id}/review")
 def review(account_id: str, period: str = "2025", product: str | None = None,
            baseline: str = "B_LOCAL", sens: str = "base", priorities: str | None = None,
-           site: str | None = None, audience: str = "kam", hint: str | None = None):
+           site: str | None = None, audience: str = "kam", hint: str | None = None,
+           service_line: str | None = None):
     chips = [p.strip() for p in priorities.split(",") if p.strip() in KNOWN_PRIORITIES]         if priorities else None
     try:
         params = ReviewParams(account_id=account_id, period=period, product=product,
                               baseline_id=baseline, sensitivity=sens, priorities=chips,
                               priority_source_hint=(hint if hint else "chips") if chips else None,
-                              site=site, audience=audience)
+                              site=site, audience=audience, service_line=service_line or None)
     except ValueError as e:
         raise HTTPException(422, str(e))
     return _review(params).model_dump(mode="json")

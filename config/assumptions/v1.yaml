@@ -88,3 +88,8 @@ register:
   value_or_rule: max(active_wearers) across product rows per site-month
   confidence: Medium
   treatment: Confirm with data owner
+- id: T3
+  assumption: Mats baseline factors (team)
+  value_or_rule: Mats use the same per-kg baseline factors as workwear
+  confidence: Low
+  treatment: Replace with mat-specific factors for production

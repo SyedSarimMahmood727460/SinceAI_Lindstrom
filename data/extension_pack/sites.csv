@@ -1,0 +1,6 @@
+site_id,customer_id,site_name,country,city,site_type,primary_laundry_id,data_status
+S101,CUST004,Harbour Hotel Helsinki,Finland,Helsinki,Hotel,L002,SYNTHETIC
+S102,CUST004,Harbour Hotel Turku,Finland,Turku,Hotel,L002,SYNTHETIC
+S103,CUST004,Harbour Hotel Tallinn,Estonia,Tallinn,Hotel,L002,SYNTHETIC
+S104,CUST004,Harbour Hotel Tartu,Estonia,Tartu,Hotel,L002,SYNTHETIC
+S105,CUST004,Harbour Hotel Pärnu,Estonia,Pärnu,Hotel,L002,SYNTHETIC

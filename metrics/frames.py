@@ -20,17 +20,20 @@ def _node_column(con: duckdb.DuckDBPyConnection, node_id: str) -> str:
 
 
 def _fact(con, table: str, col: str, node_id: str, months: list[str],
-          product: str | None) -> pd.DataFrame:
+          product: str | None, service_line: str | None = None) -> pd.DataFrame:
     sql = f"select * from {table} where {col} = ? and list_contains(?, month)"
     params: list = [node_id, months]
     if product is not None:
         sql += " and product_id = ?"
         params.append(product)
+    if service_line is not None:
+        sql += " and product_id in (select product_id from product where service_line = ?)"
+        params.append(service_line)
     return con.execute(sql + " order by month, site_id, product_id", params).df()
 
 
 def base_frames(con: duckdb.DuckDBPyConnection, account_id: str, months: list[str],
-                product: str | None) -> dict[str, pd.DataFrame]:
+                product: str | None, service_line: str | None = None) -> dict[str, pd.DataFrame]:
     """Frames for an ACCOUNT or SITE node (`account_id` may also be a site id)."""
     col = _node_column(con, account_id)
     flagged = {
@@ -40,7 +43,7 @@ def base_frames(con: duckdb.DuckDBPyConnection, account_id: str, months: list[st
     products = con.execute(
         "select product_id, footprint_kgco2e, purchase_cost_eur from product").df()
 
-    act = _fact(con, "fact_service_month", col, account_id, months, product)
+    act = _fact(con, "fact_service_month", col, account_id, months, product, service_line)
     lm = con.execute(
         "select laundry_id, month, washed_kg as laundry_kg, fresh_water_l, process_energy_kwh, "
         "process_kgco2e, delivery_kgco2e, load_id as laundry_load_id from fact_laundry_month").df()
@@ -67,8 +70,8 @@ def base_frames(con: duckdb.DuckDBPyConnection, account_id: str, months: list[st
     act = act.merge(products[["product_id", "purchase_cost_eur"]], on="product_id", how="left")
     act["dq_warning"] = [(lid, m) in flagged for lid, m in zip(act["laundry_id"], act["month"])]
 
-    cycles = _fact(con, "fact_service_cycle", col, account_id, months, product)
-    repairs = _fact(con, "fact_repair_month", col, account_id, months, product).merge(
+    cycles = _fact(con, "fact_service_cycle", col, account_id, months, product, service_line)
+    repairs = _fact(con, "fact_repair_month", col, account_id, months, product, service_line).merge(
         products[["product_id", "footprint_kgco2e"]], on="product_id", how="left")
     sites = con.execute(
         f"select * from org_node where level = 'SITE' and "

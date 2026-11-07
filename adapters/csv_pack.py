@@ -8,6 +8,29 @@ import pandas as pd
 
 from adapters.canonical import canonical_from_sheets
 
+# CSV text is read as strings (ids stay text, "NA" stays "NA") and the known typed columns
+# are converted here, so the frames match what the Excel adapter produces.
+NUMERIC = {
+    "avg_weight_kg", "synthetic_product_footprint_kgco2e", "synthetic_purchase_cost_eur",
+    "active_wearers", "allocated_pieces", "active_assets_scanned", "washed_pieces",
+    "packed_pieces", "customer_washed_kg", "service_requests", "cycle_number", "cycle_hours",
+    "repair_count", "washed_kg", "fresh_water_l", "process_energy_kwh",
+    "process_emissions_kgco2e", "delivery_emissions_kgco2e",
+    "recycling_kg", "reuse_kg", "energy_recovery_kg", "incineration_kg",
+}
+TIMESTAMPS = ("pickup_timestamp", "in_laundry_timestamp", "out_laundry_timestamp",
+              "delivered_timestamp")
+
+
+def _typed(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.where(df != "", None)
+    for col in df.columns:
+        if col in NUMERIC:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        elif col in TIMESTAMPS:
+            df[col] = pd.to_datetime(df[col], errors="coerce")
+    return df
+
 FILES = {
     "customers.csv": "Customers", "sites.csv": "Sites", "products.csv": "Products",
     "laundries.csv": "Laundries", "service_activity.csv": "Service_Activity",
@@ -33,7 +56,8 @@ class CsvPackAdapter:
             if not f.is_file():
                 continue
             try:
-                sheets[sheet] = pd.read_csv(f, encoding="utf-8")
+                sheets[sheet] = _typed(pd.read_csv(
+                    f, encoding="utf-8", dtype=str, keep_default_na=False))
             except pd.errors.EmptyDataError:
                 continue  # zero-byte file: treat as absent
         return sheets

@@ -132,11 +132,13 @@ def build_review(con, params: ReviewParams, engine: Engine | None = None,
         prompt=chosen if chosen and hint == "prompt" else None)
 
     # metrics (the selected sensitivity picks every headline value)
-    q = dict(period=params.period, product=params.product, baseline_id=params.baseline_id)
+    sl = params.service_line
+    q = dict(period=params.period, product=params.product, baseline_id=params.baseline_id,
+             service_line=sl)
     account_all = {k: _select(m, sens) for k, m in engine.compute(acc, **q).items()}
     sites_all = {s: {k: _select(m, sens) for k, m in ms.items()}
                  for s, ms in engine.site_metrics(acc, **q).items()}
-    laundry_stats = engine.laundry_stats(acc, params.period)
+    laundry_stats = engine.laundry_stats(acc, params.period, sl)
 
     site_rows = con.execute(
         "select node_id, name, country, city, site_type, primary_laundry_id from org_node "
@@ -167,9 +169,9 @@ def build_review(con, params: ReviewParams, engine: Engine | None = None,
              for r in site_rows if r[0] in sites_all]
 
     trends = engine.monthly(acc, TREND_IDS, params.period, params.product,
-                            site_id=params.site, baseline_id=params.baseline_id)
-    bl = engine.baseline_comparison(acc, params.period, params.product)
-    circ = engine.circularity(acc, params.period, params.product)
+                            site_id=params.site, baseline_id=params.baseline_id, service_line=sl)
+    bl = engine.baseline_comparison(acc, params.period, params.product, sl)
+    circ = engine.circularity(acc, params.period, params.product, sl)
 
     # meta
     countries = sorted({r[2] for r in site_rows if r[2]})
@@ -186,6 +188,10 @@ def build_review(con, params: ReviewParams, engine: Engine | None = None,
         "select distinct p.product_id, p.name from fact_service_month f "
         "join product p on p.product_id = f.product_id where f.customer_id = ? "
         "order by p.product_id", [acc]).fetchall()]
+    service_lines = [r[0] for r in con.execute(
+        "select distinct p.service_line from fact_service_month f "
+        "join product p on p.product_id = f.product_id where f.customer_id = ? "
+        "and p.service_line is not null order by 1", [acc]).fetchall()]
     meta = Meta(
         run_id=run_id, generated_at=datetime.now(timezone.utc),
         node=NodeInfo(id=acc, name=name, industry=industry, segment=segment, countries=countries),
@@ -194,7 +200,8 @@ def build_review(con, params: ReviewParams, engine: Engine | None = None,
                   "factors": {k: v for k, v in baseline.items()
                               if k.endswith(("_per_kg", "_share"))}},
         sensitivity=sens, assumption_set_version=assumptions.get("version", ""),
-        sources=sources, products=products)
+        sources=sources, products=products,
+        service_lines=service_lines, service_line=sl)
 
     note = load_yaml("industry_rules.yaml")["emphasis"].get(industry, "")
     context = Context(active_priorities=priorities, priority_source=source,

@@ -4,6 +4,7 @@ defaults:
   "Food & Beverage": [service, water]
   "Manufacturing": [cost, circularity, service]
   "Healthcare": [service, emissions]
+  "Hospitality": [service, cost, water]
 topic_map:
   "Water efficiency": water
   "Scope 3 evidence": emissions
@@ -16,8 +17,10 @@ topic_map:
   "Safety": service
   "Compliance": service
   "Traceability": service
+  "Guest experience": service
 # dashboard_emphasis text per industry (Industry_Priorities sheet), shown as the "why this view" note.
 emphasis:
   "Food & Beverage": "Show service continuity, food-industry garment control and hygiene-related performance. Prioritize water use/savings and washed-kg efficiency. Highlight turnaround, service-request-free days and delivery performance."
   "Manufacturing": "Highlight unused allocation, garments per wearer and optimization potential. Highlight repairs, postponed replacements and circularity value. Highlight product/service reliability and exception signals."
   "Healthcare": "Prioritize garment flow, service-cycle completion and traceability. Highlight turnaround and reliable availability. Highlight transparent sources, data quality and reporting boundaries."
+  "Hospitality": "Highlight guest-facing hygiene and textile availability, cost per room-night drivers and water efficiency."
