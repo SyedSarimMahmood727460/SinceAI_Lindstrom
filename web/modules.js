@@ -196,6 +196,8 @@ const FIT_KIND = {PUBLIC_REFERENCE: ['PUBLIC', 'b-PUBLIC'], DATA_PACK: ['DATA PA
 // Each tier rounds first and then promotes the unit, so 999,999 EUR reads "€1.00M".
 const MINUS = '−', NO_VALUE = '—';
 const grp = (v, d) => Number(v).toLocaleString('en-GB', {minimumFractionDigits: d, maximumFractionDigits: d});
+/** A plain compact count: 0 dp from 10 up (67, 230, 1,152), else 1 dp without a trailing zero. */
+const compactNum = a => (Math.round(a * 10) / 10 >= 10 ? grp(a, 0) : grp(a, 1).replace(/\.0$/, ''));
 function compactAbs(a, unit) {
   switch (unit) {
     case 'EUR':
@@ -211,11 +213,12 @@ function compactAbs(a, unit) {
     case 'h': return grp(a, 0) + ' h';
     case 'kWh': return Math.round(a) >= 1000 ? grp(a / 1000, 0) + ' MWh' : grp(a, 0) + ' kWh';
     case 'ratio': return grp(a * 100, 1) + '%';
-    default: return null;
+    case 'kg/wearer': return compactNum(a) + ' kg per wearer';
+    default: return String(unit || '').startsWith('per 100') ? `${compactNum(a)} ${unit}` : null;
   }
 }
 /** Compact meeting style: €1.96M, €758k, €8,250, 1,407 m³, 255 t CO₂e, 1,152 h, 172 MWh, 98.3%.
- * Negative values carry a true minus sign (−€297k), never "−€0"; None is a dash. */
+ * Negative values carry a true minus sign (−€297k), never "−€0"; None, NaN and ±Infinity are a dash. */
 function fmtCompact(value, unit) {
   if (value == null || !isFinite(value)) return NO_VALUE;
   const t = compactAbs(Math.abs(value), unit);
@@ -289,8 +292,11 @@ const MEET = {
       : `Doing it yourself would cost about ${fmtCompact(diy.value, diy.unit)} in ${R.meta.period}`;
     const conv = d.convenience || {}, hrs = conv.staff_hours_freed;
     const tiles = [];
-    if (net) tiles.push(mTile(net.value >= 0 ? 'Less with Lindström' : 'More with Lindström', net, node,
-      'do-it-yourself total minus the Lindström contract', {cls: 'money', text: fmtCompact(Math.abs(net.value), 'EUR')}));
+    if (net) {  // signed value next to its signed range; a range across zero is labelled as such
+      const r = net.range || {}, straddles = r.low != null && r.high != null && Math.min(r.low, r.high) < 0 && Math.max(r.low, r.high) > 0;
+      tiles.push(mTile(straddles ? 'Difference (estimate)' : (net.value >= 0 ? 'Less with Lindström' : 'Do-it-yourself minus Lindström'), net, node,
+        'do-it-yourself total minus the Lindström contract', {cls: 'money'}));
+    }
     tiles.push(mTile('Do-it-yourself cost', diy, node, `running the same service yourself, ${R.meta.period}`));
     tiles.push(hrs && hrs.value != null ? mTile('Staff hours freed', hrs, node, "your staff's time back")
       : mTile('On-time delivery', conv.on_time_rate, node, 'share of deliveries that arrived on time'));
@@ -347,7 +353,8 @@ const MEET = {
     }
     const per = 'per year, whole account';
     const levers = (g.levers || []).map(lv => `<li><b>${esc(lv.label)}</b><span>${[['diy_cost_avoided', 'avoided'], ['co2_saving_kg', ''], ['staff_hours_freed', 'freed']]
-      .map(([key, w]) => (lv[key] && lv[key].value != null ? `${esc(fmtCompact(lv[key].value, lv[key].unit))}${w ? ' ' + w : ''}` : '')).filter(Boolean).join(' · ')}</span></li>`).join('');
+      .map(([key, w]) => { const m = lv[key], v = m && m.value != null ? fmtCompact(m.value, m.unit) : '';
+        return /[1-9]/.test(v) ? `${esc(v)}${w ? ' ' + w : ''}` : ''; }).filter(Boolean).join(' · ')}</span></li>`).join('');
     return {title: g.statement || 'Growing together', long: true,
       tiles: mTiles([mTile('Do-it-yourself cost avoided', t.diy_cost_avoided, node, per, {cls: 'money'}),
         mTile('CO₂e avoided', t.co2_saving_kg, node, per), mTile('Staff hours freed', t.staff_hours_freed, node, per)]),
@@ -362,7 +369,7 @@ const MEET = {
     const labelOf = id => { const m = ctx.kpi(id); return m ? m.label : id; };
     const target = a => (isCustomer ? esc(a.target_2026 == null ? '—' : a.target_2026) : `<input type="text" placeholder="set" aria-label="Target for ${esc(a.text)}" value="${esc(a.target_2026 == null ? '' : a.target_2026)}">`); /* kam-only: targets */
     const rows = R.actions.map(a => `<tr><td class="l">${esc(a.text)}</td><td class="l">${esc(a.owner)}</td>
-      <td class="l">${esc(labelOf(a.kpi_metric_id))}</td><td>${esc(fmtV(unitOf(a.kpi_metric_id), a.value_2025))}</td><td>${target(a)}</td></tr>`).join('');
+      <td class="l">${esc(labelOf(a.kpi_metric_id))}</td><td>${esc(fmtCompact(a.value_2025, unitOf(a.kpi_metric_id)))}</td><td>${target(a)}</td></tr>`).join('');
     return {title: 'Agree the next steps',
       support: `<div class="mgrid5"><div class="card"><h3>Discussion points</h3>${pts.length ? `<ol class="qs">${pts.map(p => `<li>${esc(p)}</li>`).join('')}</ol>` : '<p class="small">No discussion points for this view.</p>'}</div>
         <div class="card"><h3>Actions → tracked next year</h3><table><tr><th class="l">Action</th><th class="l">Owner</th><th class="l">KPI</th><th>${esc(R.meta.period)}</th><th>2026 target</th></tr>${rows ||
@@ -387,9 +394,9 @@ const Components = {
     const nav = `<div class="mnav">${prev ? `<button type="button" class="btn ghost" data-step="${prev}">◀ Back</button>` : '<span></span>'}
       <span class="small mfoot">${esc(MEET_FOOT)}</span>
       ${next ? `<button type="button" class="btn" data-step="${next}">Next: ${esc(name(next))} ▶</button>` : '<span></span>'}</div>`;
-    return {html: `<div class="meeting" data-step-now="${step}">
+    return {html: `<div class="meeting" data-step-now="${step}"><h1 class="sr">Customer meeting: ${esc(ctx.R.meta.node.name)}, ${esc(ctx.R.meta.period)}</h1>
       <div class="msteps" role="group" aria-label="Meeting steps">${bar}${isCustomer ? '<span class="mpill" title="Internal figures and edit controls are hidden">Customer view</span>' : ''}</div>
-      <h1 class="mtitle ${s.long ? 'long' : ''}">${step} · ${esc(s.title)}</h1>
+      <h2 class="mtitle ${s.long ? 'long' : ''}" tabindex="-1">${step} · ${esc(s.title)}</h2>
       ${s.tiles || ''}${s.support || ''}${sayBox(s.say)}${nav}${s.after || ''}</div>`};
   },
 

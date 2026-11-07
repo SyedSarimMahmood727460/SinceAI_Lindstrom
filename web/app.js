@@ -274,7 +274,13 @@ function setStep(n, focusBar) {
   const vis = VR.meetingSteps(R, S.audience);
   if (!vis.includes(n)) return;
   S.step = n; closeDrawer(); renderPage(); window.scrollTo(0, 0);
-  if (focusBar) { const b = document.querySelector(`.msteps [data-step="${n}"]`); if (b) b.focus(); }
+  focusStep(n, focusBar);
+}
+/** After a step change keep the keyboard in the step bar when it started there; otherwise move
+ * focus to the new step's title so screen readers announce it. */
+function focusStep(n, focusBar) {
+  const el = focusBar ? document.querySelector(`.msteps [data-step="${n}"]`) : document.querySelector('.mtitle');
+  if (el) el.focus({preventScroll: true});
 }
 /** ←/→ step through the meeting when focus is not in a form field. */
 function stepKey(e) {
@@ -290,32 +296,53 @@ function stepKey(e) {
   return true;
 }
 
-const DEMO = {[VR.INPUT_CONTRACT]: 1200000, extra_sites: 4};
-/** Demo scenario (design §6): merge an example contract price and growth scenario into the stored
- * inputs (entries already stored win; the demo service line is added), then PUT the full set. */
+/** The account's base-case do-it-yourself total for the whole account (no product or service-line
+ * filter): dto.diy_total.range.base, fetched unfiltered when a filter is active. */
+async function unfilteredDiyBase(acct) {
+  let r = R;
+  if (S.product || S.serviceLine) {
+    const p = new URLSearchParams({period: S.period, baseline: S.baseline, sens: 'base', audience: S.audience});
+    r = await getJSON(`/accounts/${encodeURIComponent(acct)}/review?${p}`);
+  }
+  const t = r && r.dto && r.dto.diy_total;
+  const base = t && t.range && t.range.base != null ? t.range.base : null;
+  return base != null && isFinite(base) ? base : null;
+}
+/** Demo scenario (design §6, controller ruling): contract price = 60% of the account's base, unfiltered
+ * do-it-yourself total, to the nearest €10,000 (skipped when there is none); 4 more sites; mats, or
+ * washroom if the account already uses mats. Merged into the stored inputs (stored entries win; the
+ * demo service line is added), then the full set is PUT. The toast follows the reloaded review. */
 async function loadDemo(btn) {
   if (!R || S.audience === 'customer') return;
   const acct = S.account;
-  if (btn) btn.disabled = true;
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading demo…'; }
   try {
-    const [st, cat] = await Promise.all([getJSON(`/accounts/${encodeURIComponent(acct)}/inputs?include=growth`), catalogue()]);
+    const [st, cat, base] = await Promise.all([getJSON(`/accounts/${encodeURIComponent(acct)}/inputs?include=growth`),
+      catalogue(), unfilteredDiyBase(acct)]);
     if (acct !== S.account) return;
     const used = new Set(R.meta.service_lines || []);
     const mats = (cat || []).find(c => c.id === 'mats');
     const line = used.has(mats ? mats.service_line : 'Mats') ? 'washroom' : 'mats';
+    const price = base ? Math.round(0.6 * base / 1e4) * 1e4 : 0;
+    const demo = {extra_sites: 4, ...(price > 0 ? {[VR.INPUT_CONTRACT]: price} : {})};
     const g = growthBody(st.growth);
-    const body = {...DEMO, ...diyStored(st.inputs), ...g};
+    const body = {...demo, ...diyStored(st.inputs), ...g};
     body.extra_service_lines = [...new Set([...(g.extra_service_lines || []), line])];
-    await saveInputs(body, null, 'Demo scenario loaded — example numbers; edit or reset in Your numbers.');
+    await saveInputs(body, null, 'Demo scenario loaded — example numbers; edit or reset in Your numbers.', true);
   } catch (e) {
     toast(`Could not load the demo scenario (${e.message})`, true);
-  } finally { if (btn && btn.isConnected) btn.disabled = false; }
+  } finally { if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = 'Load demo scenario'; } }
 }
-/** The service catalogue, loaded once. */
-async function catalogue() {
-  if (EXT.catalogue) return EXT.catalogue;
-  try { EXT.catalogue = await getJSON('/config/service-catalogue'); } catch (e) { console.warn('catalogue unavailable', e); return []; }
-  return EXT.catalogue;
+/** The service catalogue, loaded once (shared by the meeting, growth and intelligence pages). */
+let catLoad = null;
+function catalogue() {
+  if (EXT.catalogue) return Promise.resolve(EXT.catalogue);
+  if (!catLoad) {
+    catLoad = getJSON('/config/service-catalogue').then(c => { EXT.catalogue = c; return c; })
+      .catch(e => { console.warn('catalogue unavailable', e); EXT.catalogue = []; return []; })
+      .finally(() => { catLoad = null; });
+  }
+  return catLoad;
 }
 
 // ---------- DIY, growth, intelligence and fit pages ----------
@@ -327,11 +354,7 @@ function ensurePageData(view) {
     getJSON('/config/fit').then(f => { EXT.fit = f; }).catch(e => { EXT.fit = null; toast(`Could not load the page (${e.message})`, true); })
       .finally(() => { EXT.fitLoading = false; rerender(); });
   }
-  if ((view === 'growth' || view === 'intel' || view === 'meeting') && EXT.catalogue === null && !EXT.catLoading) {
-    EXT.catLoading = true;
-    getJSON('/config/service-catalogue').then(c => { EXT.catalogue = c; }).catch(e => { EXT.catalogue = []; console.warn('catalogue unavailable', e); })
-      .finally(() => { EXT.catLoading = false; rerender(); });
-  }
+  if ((view === 'growth' || view === 'intel' || view === 'meeting') && EXT.catalogue === null && !catLoad) catalogue().then(rerender);
   if (view === 'intel' && !EXT.intel.auto && S.audience === 'kam') {
     // first visit: list the snapshots and open the example company (Fazer Group) straight away
     EXT.intel.auto = true;
@@ -480,7 +503,8 @@ function showFormError(form, detail) {
 }
 
 /** PUT replaces the whole stored set, so every save sends the DIY and the growth inputs together. */
-async function saveInputs(body, form, done) {
+/** `toastAfterReload`: show `done` once the review has reloaded (the demo scenario). */
+async function saveInputs(body, form, done, toastAfterReload = false) {
   const btns = form ? [...form.querySelectorAll('button')] : [];
   btns.forEach(b => { b.disabled = true; });
   try {
@@ -494,8 +518,9 @@ async function saveInputs(body, form, done) {
   ['extra_sites', 'extra_wearers', 'extra_service_lines', 'expansion_price_eur_per_site_year'].forEach(k => { if (k in body) g[k] = body[k]; });
   GROWTH_SENT[S.account] = Object.keys(g).length ? g : null;
   delete EXT.storedGrowth[S.account];
-  toast(done);
+  if (!toastAfterReload) toast(done);
   await load();
+  if (toastAfterReload) toast(done);
 }
 
 async function onSubmit(e) {
@@ -829,7 +854,7 @@ document.addEventListener('keydown', e => {
 document.addEventListener('submit', onSubmit);
 window.addEventListener('hashchange', () => {  // a typed #meeting/N; renderPage clamps a hidden step
   const n = hashStep();
-  if (n && R && (n !== S.step || S.view !== 'meeting')) { S.view = 'meeting'; S.step = n; closeDrawer(); renderPage(); }
+  if (n && R && (n !== S.step || S.view !== 'meeting')) { S.view = 'meeting'; S.step = n; closeDrawer(); renderPage(); focusStep(S.step); }
 });
 document.addEventListener('input', onInput);
 const glAt = e => (e.target && e.target.closest ? e.target.closest('.gl[data-term]') : null);

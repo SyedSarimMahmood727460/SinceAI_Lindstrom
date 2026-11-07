@@ -224,3 +224,4 @@ ul.mlevers li span{margin-left:8px;color:var(--mute)}
 .mgrid5{display:grid;grid-template-columns:1fr 1.4fr;gap:12px}
 .mexport{display:flex;align-items:center;gap:8px}
 @media (max-width:1100px){.mtiles,.mtiles.n2,.mgrid5{grid-template-columns:1fr}.msteps{flex-wrap:wrap}}
+.mtitle:focus{outline:none}.mtitle:focus-visible{outline:2px solid var(--calc);outline-offset:4px;border-radius:4px}
