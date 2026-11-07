@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.build import _narrate, build_review, dq_warning_rows
 from api.review_model import ReviewParams
@@ -153,6 +153,32 @@ def _parse_intent(text: str) -> ViewSpec:
 @app.post("/intent")
 def intent(req: IntentRequest):
     return _parse_intent(req.text).model_dump(mode="json")
+
+
+class IntelRequest(BaseModel):
+    company: str = Field(max_length=200)
+    website: str | None = Field(default=None, max_length=300)
+
+
+@app.post("/intel")
+def intel(req: IntelRequest):
+    """Account intelligence (G8): sourced public research, or the committed snapshot.
+    Independent of the data pack and the engine: no review numbers are mixed in."""
+    from ai import llm
+    from ai.intel import IntelUnavailable, research_company
+    if not req.company.strip():
+        raise HTTPException(422, "company: enter a company name")
+    try:
+        return research_company(req.company, (req.website or "").strip() or None,
+                                llm.use_llm()).model_dump(mode="json")
+    except IntelUnavailable as e:
+        raise HTTPException(503, str(e))
+
+
+@app.get("/intel/snapshots")
+def intel_snapshots():
+    from ai.intel import list_snapshots
+    return list_snapshots()
 
 
 @app.get("/metrics/{metric_id}/explain")
