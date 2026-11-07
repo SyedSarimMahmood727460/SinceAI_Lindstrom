@@ -12,7 +12,7 @@ import statistics
 from typing import Any
 
 from config.loader import load_yaml
-from export.format import _scale, fmt_number
+from export.format import _scale, fmt_compact, fmt_number
 
 ILLUSTRATIVE = "illustrative comparison"
 CARD_ORDER = ["value_delivered", "vs_diy", "biggest_improvement", "growth", "whats_next"]
@@ -22,9 +22,13 @@ def _present(m) -> bool:
     return m is not None and m.value is not None
 
 
+COMPACT_UNITS = {"EUR", "l", "kgCO2e", "h"}
+
+
 def _fmt(value: float, unit: str) -> str:
-    """Formatted like export.format, except hours drop the decimal (a story reads '1,152 h')."""
-    return f"{value:,.0f} h" if unit == "h" else fmt_number(value, unit)
+    """Compact meeting style for money, water, CO₂e and hours (€1.96M, 1,407 m³, 255 t CO₂e,
+    1,152 h); other units as export.format."""
+    return fmt_compact(value, unit) if unit in COMPACT_UNITS else fmt_number(value, unit)
 
 
 def _about(m, absolute: bool = False) -> str:
@@ -35,9 +39,11 @@ def _about(m, absolute: bool = False) -> str:
     r = m.range
     if r is None or r.low is None or r.high is None:
         return f"about {x}"
+    if m.unit in COMPACT_UNITS:  # each end carries its own unit: "between €1.36M and €2.74M"
+        lo, hi = sorted((sign(r.low), sign(r.high)))
+        a, b = _fmt(lo, m.unit), _fmt(hi, m.unit)
+        return f"about {x}" if a == b else f"about {x} (between {a} and {b})"
     _, u, dec, div = _scale(value, m.unit)
-    if m.unit == "h":
-        dec = 0
     lo, hi = sorted((sign(r.low) / div, sign(r.high) / div))
     if f"{lo:,.{dec}f}" == f"{hi:,.{dec}f}":
         return f"about {x}"
@@ -185,8 +191,11 @@ def _plain_site_story(review, o):
         return None
     med = statistics.median(vals.values())
     name = site.name
+    m = site.metrics[metric]
+    facts = {"site_name": name, "metric_label": m.label, "value": vals[node], "typical": med,
+             "unit": m.unit}
     return (text.format(name=name, v=fmt(vals[node]), med=fmt(med)) + " " + close,
-            say.format(name=name), [metric_id])
+            say.format(name=name), [metric_id], facts)
 
 
 def _biggest(review, k):
@@ -199,12 +208,14 @@ def _biggest(review, k):
     if plain is None:  # account-level rule (R4) or missing site data: a jargon-free fallback
         title = o.title.replace(" (relative)", "")
         statement = o.finding if o.rule_id == "R4" else title + "."
-        plain = (statement, o.action, [])
-    statement, say, refs = plain
+        plain = (statement, o.action, [], None)  # no site pair: no figure tiles
+    statement, say, refs, facts = plain
     refs = refs or [e[0] for e in o.evidence if e[0] in k]
     return {"id": "biggest_improvement", "title": "Your biggest opportunity to improve",
             "statement": statement, "relatable": None, "what_to_say": say,
-            "detail_view": "overview_observations", "value_refs": list(dict.fromkeys(refs))}
+            "detail_view": "overview_observations", "value_refs": list(dict.fromkeys(refs)),
+            # the site's figure vs the typical (median) site, for the meeting step-3 tiles
+            "facts": facts}
 
 
 def _growth(review, k):

@@ -1,4 +1,6 @@
-"""PPTX export (spec 13). Reads only the ReviewModel; every number goes through fmt_value / fmt_number."""
+"""PPTX export in meeting order (design §7): cover, the five meeting steps (compact numbers,
+export.sections.meeting_steps), then the appendix. Reads only the ReviewModel; every number goes
+through export.format."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,8 +14,8 @@ from pptx.util import Emu, Inches, Pt
 from export import charts
 from export.format import _scale, fmt_number, fmt_range, fmt_value  # noqa: F401  (re-exported)
 from export.sections import (  # noqa: F401  (PRIORITY_LABEL / SITE_METRIC re-exported)
-    PRIORITY_LABEL, SITE_METRIC, WARN, _customer_kpis, _focus_text, _no_data, _no_internal, _top_kpis,
-    diy_view, growth_view, site_groups, tag)
+    APPENDIX, PRIORITY_LABEL, SITE_METRIC, WARN, _customer_kpis, _focus_text, _no_data, _no_internal,
+    _top_kpis, meeting_steps, site_groups, tag)
 
 NAVY = RGBColor(0x1B, 0x2A, 0x4A)
 RED = RGBColor(0xD7, 0x19, 0x20)
@@ -178,107 +180,146 @@ def _notes(slide, text):
         slide.notes_slide.notes_text_frame.text = text
 
 
-def _story_slide(prs, review, n):
-    slide = _new_slide(prs, "Customer story", review, n,
-                       "What the service delivers, in plain language; every figure is an estimate with a range.")
-    cards = review.story
-    if not cards:
-        _no_data_note(slide, "No story for this filter")
-        return
-    _, tf = _textbox(slide, MARGIN, Inches(1.55), CONTENT_W, Inches(5.3))
-    for i, c in enumerate(cards):
-        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        p.space_before = Pt(0 if i == 0 else 8)
-        _run(p, c["title"], 15, True, RED)
-        _run(tf.add_paragraph(), c["statement"], 13)
-        if c.get("relatable"):
-            _run(tf.add_paragraph(), c["relatable"], 11, False, GREY, italic=True)
-    _notes(slide, "\n".join(f"{c['title']}: {c['what_to_say']}" for c in cards if c.get("what_to_say")))
-
-
 def _fit_row_h(n_rows, top, bottom, preferred):
     return min(preferred, (bottom - top) / n_rows)
 
 
-def _diy_slide(prs, review, n):
-    v = diy_view(review)
-    slide = _new_slide(prs, "Service vs do-it-yourself", review, n,
-                       "What you would spend doing it yourself instead of using the service "
-                       f"(baseline: {clip(review.meta.baseline.get('name', ''), 60)}).")
-    if v is None:
+# ---------------------------------------------------------------- the meeting steps (design §7)
+# Layout bands (inches): lead message 1.12–1.95 · hero tiles 2.0–3.5 · supporting content
+# 3.65–6.1 · "What to say" strip 6.2–6.9 · footer from 6.98.
+LEAD_Y, TILE_Y, TILE_H, BODY_Y, BODY_END, SAY_Y, SAY_H = 1.12, 2.0, 1.5, 3.65, 6.1, 6.2, 0.7
+
+
+def _lead(slide, text):
+    _, tf = _textbox(slide, MARGIN, Inches(LEAD_Y), CONTENT_W, Inches(TILE_Y - LEAD_Y - 0.05))
+    _run(tf.paragraphs[0], clip(text, 340), 15, False, NAVY)  # up to 3 lines
+
+
+def _tiles(slide, tiles):
+    """2–3 hero tiles: label, big compact number, range line, context line."""
+    gap = Inches(0.2)
+    w = int((CONTENT_W - gap * (len(tiles) - 1)) / len(tiles))
+    for i, t in enumerate(tiles):
+        x = MARGIN + (w + gap) * i
+        _rect(slide, x, Inches(TILE_Y), w, Inches(TILE_H), LIGHT)
+        _rect(slide, x, Inches(TILE_Y), Inches(0.07), Inches(TILE_H), RED)
+        _, tf = _textbox(slide, x + Inches(0.15), Inches(TILE_Y + 0.08), w - Inches(0.25), Inches(TILE_H - 0.16))
+        _run(tf.paragraphs[0], clip(t["label"], 48), 13, True, GREY)
+        _run(tf.add_paragraph(), t["value"], 30, True, NAVY)
+        if t["range"]:
+            _run(tf.add_paragraph(), t["range"], 12, False, GREY)
+        if t["context"]:
+            _run(tf.add_paragraph(), clip(t["context"], 60), 11, False, GREY, italic=True)
+
+
+def _say(slide, text):
+    if not text:
+        return
+    _rect(slide, MARGIN, Inches(SAY_Y), CONTENT_W, Inches(SAY_H), LIGHT)
+    _, tf = _textbox(slide, MARGIN + Inches(0.1), Inches(SAY_Y + 0.05), CONTENT_W - Inches(0.2),
+                     Inches(SAY_H - 0.1), MSO_ANCHOR.MIDDLE)
+    _run(tf.paragraphs[0], "What to say: ", 12, True, RED)
+    _run(tf.paragraphs[0], clip(text, 220), 12)
+
+
+def _step_frame(prs, review, n, step, lead=True):
+    """Title, lead message, tiles and the What to say strip; returns (slide, top of the body band)."""
+    slide = _new_slide(prs, step["title"], review, n)
+    if lead:
+        _lead(slide, step["message"])
+    top = LEAD_Y if not lead else TILE_Y
+    if step["tiles"]:
+        _tiles(slide, step["tiles"])
+        top = BODY_Y
+    _say(slide, step["what_to_say"])
+    _notes(slide, step["what_to_say"])
+    return slide, top
+
+
+def _step1(prs, review, n, step):
+    slide, top = _step_frame(prs, review, n, step)
+    _, tf = _textbox(slide, MARGIN, Inches(top), CONTENT_W, Inches(BODY_END - top))
+    _run(tf.paragraphs[0], clip(step["statement"] or "No data for this filter", 320), 14)
+    if step["relatable"]:
+        p = tf.add_paragraph()
+        p.space_before = Pt(6)
+        _run(p, clip(step["relatable"], 220), 12, False, GREY, italic=True)
+
+
+def _step2(prs, review, n, step):
+    slide, top = _step_frame(prs, review, n, step)
+    if not step["lines"]:
         _no_data_note(slide, "No comparison for this filter")
         return
-    rows = [[r[0], r[1], r[2], r[3].title()] for r in v["rows"]]
-    if v["hours_row"]:
-        rows.append([*v["hours_row"][:3], "Estimated"])
-    row_h = _fit_row_h(len(rows) + 1, 1.6, 5.3, 0.45)
-    wrapped = sum(1 for r in rows if len(r[0]) > 38)  # long labels wrap to a second line
-    _table(slide, MARGIN, Inches(1.6), [3.9, 1.4, 1.8, 1.2], rows,
-           ["Item (per year)", "Value", "Range (low – high)", "Status"], size=12, row_h=row_h, header_size=12)
-    y = 1.6 + row_h * (len(rows) + 1) + 0.2 * wrapped + 0.15
-    _, tf = _textbox(slide, MARGIN, Inches(y), Inches(8.3), Inches(6.9 - y))
-    _bullets(tf, [clip(t, 170) for t in v["notes"]] + ([clip(v["hygiene"], 170)] if v["hygiene"] else []),
-             12, GREY, 3, bullet="", first=True)
-    _, tf = _textbox(slide, Inches(9.2), Inches(1.6), Inches(3.55), Inches(5.3))
-    _heading(tf, "Your numbers", 15, first=True)
-    for i in v["inputs"]:
+    rows = step["lines"]
+    wrapped = sum(1 for r in rows if len(r[0]) > 52)  # long labels wrap to a second line
+    row_h = _fit_row_h(len(rows) + 1 + wrapped * 0.6, top, BODY_END, 0.36)
+    _table(slide, MARGIN, Inches(top), [5.0, 1.2, 1.8], rows, ["Per year", "Value", "Range (low – high)"],
+           size=11, row_h=row_h, header_size=11)
+    x, w = Inches(8.75), Inches(3.98)
+    _, tf = _textbox(slide, x, Inches(top), w, Inches(0.35))
+    _run(tf.paragraphs[0], "Contract vs doing it yourself", 12, True, RED)
+    biggest = max(v for _, v, _ in step["bars"]) or 1
+    y = top + 0.4
+    for label, value, text in step["bars"]:
+        _, tf = _textbox(slide, x, Inches(y), w, Inches(0.28))
+        _run(tf.paragraphs[0], f"{label}: ", 11, True, NAVY)
+        _run(tf.paragraphs[0], text, 11)
+        _rect(slide, x + Inches(0.05), Inches(y + 0.3), int((w - Inches(0.1)) * max(value, 0) / biggest),
+              Inches(0.25), NAVY if label.startswith("Lindström") else GREY)
+        y += 0.68
+    if step["notes"]:
+        _, tf = _textbox(slide, x, Inches(y), w, Inches(BODY_END - y))
+        _bullets(tf, [clip(t, 150) for t in step["notes"][:2]], 10, GREY, 2, bullet="", first=True)
+
+
+def _step3(prs, review, n, step):
+    slide, top = _step_frame(prs, review, n, step)
+    if not step["next"]:
+        return
+    _, tf = _textbox(slide, MARGIN, Inches(top), CONTENT_W, Inches(BODY_END - top))
+    _heading(tf, "Also worth a look", 15, first=True)
+    for title, action in step["next"]:
         p = tf.add_paragraph()
-        p.space_after = Pt(2)
-        _run(p, f"{clip(i['label'], 40)}: ", 11, True, NAVY)
-        _run(p, f"{i['value']} ({'default' if i['source'] == 'Default' else 'account manager'})", 11)
+        p.space_before = Pt(4)
+        _run(p, clip(title, 90), 14, True, NAVY)
+        p = tf.add_paragraph()
+        _run(p, "Next step: ", 12, True, RED)
+        _run(p, clip(action, 140), 12, False, INK, italic=True)
 
 
-def _growth_slide(prs, review, n):
-    v = growth_view(review)
-    slide = _new_slide(prs, "Growth opportunities", review, n)
-    _, tf = _textbox(slide, MARGIN, Inches(1.12), CONTENT_W, Inches(0.8))
-    _run(tf.paragraphs[0], v["statement"], 14, False, NAVY, italic=True)
-    rows = [[clip(r[0], 38)] + [val + ("\n" + rng if rng else "") for val, rng in r[1:]]
-            for r in v["rows"]]
-    row_h = _fit_row_h(len(rows) + 1, 2.05, 5.7, 0.7)
-    _table(slide, MARGIN, Inches(2.05), [2.9, 2.6, 2.2, 2.4, 2.03], rows, ["Lever", *v["columns"]],
-           size=12, row_h=row_h, header_size=12)
-    y = 2.05 + row_h * (len(rows) + 1) + 0.15
-    _, tf = _textbox(slide, MARGIN, Inches(y), CONTENT_W, Inches(6.9 - y))
+def _step4(prs, review, n, step):
+    slide, top = _step_frame(prs, review, n, step)
+    rows = [[clip(r[0], 40), *r[1:]] for r in step["levers"]]
+    row_h = _fit_row_h(len(rows) + 1, top, BODY_END - 0.75, 0.36)
+    _table(slide, MARGIN, Inches(top), [3.73, 2.1, 2.1, 2.1, 2.1], rows, ["Lever", *step["columns"]],
+           size=11, row_h=row_h, header_size=11)
+    y = top + row_h * (len(rows) + 1) + 0.08
     std = "All figures are estimates per year, scaled from your own current data; ranges run from low to high."
-    items = (v["notes"][:2] + [std]) if len(v["notes"]) > 2 else (v["notes"] + [std])  # at most 3 bullets
-    _bullets(tf, [clip(t, 200) for t in items], 12, GREY, 3, bullet="", first=True)
-    _notes(slide, review.growth.get("what_to_say") or "")
+    _, tf = _textbox(slide, MARGIN, Inches(y), CONTENT_W, Inches(BODY_END - y))
+    _bullets(tf, [clip(t, 170) for t in step["notes"][:2]] + [std], 10, GREY, 1, bullet="", first=True)
 
 
-def _exec_summary(prs, review, n):
-    slide = _new_slide(prs, "Executive summary", review, n)
-    kpis = _customer_kpis(review)
-    chart_ok = bool((review.circularity or {}).get("repairs_by_month")) and not _no_data(review)
-    w = Inches(7.4) if chart_ok else CONTENT_W
-    _, tf = _textbox(slide, MARGIN, Inches(1.25), w, Inches(5.6))
-    summary = (review.narrative.exec_summary or "").strip()
-    if _no_data(review):
-        _heading(tf, "No data for this filter", first=True)
-        _bullets(tf, ["There is no service activity for the selected customer, period and product filter.",
-                      "Change the filter to see results."], 16, first=False)
-    elif summary:
-        _heading(tf, "Summary", first=True)
-        _run(tf.add_paragraph(), clip(summary, 900), 15)
-    else:
-        _heading(tf, "Headline results", first=True)
-        heads = [k for k in kpis if k.value is not None][:4]
-        _bullets(tf, [clip(f"{k.label}: {fmt_value(k)} {tag(k)}", 90) for k in heads], 15, first=False)
-        obs = review.observations[:3]
-        if obs:
-            _heading(tf, "What stands out")
-            _bullets(tf, [clip(o.title, 90) for o in obs], 15, first=False)
-    if chart_ok:
-        slide.shapes.add_picture(str(charts.repairs_by_month_chart(review)), Inches(8.2), Inches(1.5),
-                                 width=Inches(4.55))
-        r = next((k for k in kpis if k.metric_id == "repairs"), None)
-        if r is not None and r.value is not None:
-            _, tf = _textbox(slide, Inches(8.2), Inches(4.4), Inches(4.55), Inches(0.6))
-            _run(tf.paragraphs[0], f"Repairs completed: {fmt_value(r)} {tag(r)}", 13, True, NAVY)
+def _step5(prs, review, n, step):
+    slide, top = _step_frame(prs, review, n, step, lead=False)
+    _, tf = _textbox(slide, MARGIN, Inches(top), Inches(5.5), Inches(BODY_END - top))
+    _heading(tf, "For the review meeting", first=True)
+    pts = [clip(p, 120) for p in step["points"][:5]]
+    _bullets(tf, pts or ["No discussion points for this filter."], 14, space=8, first=False)
+    _, tf = _textbox(slide, Inches(6.4), Inches(top), Inches(6.35), Inches(0.4))
+    _heading(tf, "Proposed actions", first=True)
+    rows = [[clip(a[0], 75), clip(a[1], 22), a[2], clip(a[3], 14)] for a in step["actions"][:6]]
+    if rows:
+        row_h = _fit_row_h(len(rows) + 1, top + 0.5, BODY_END, 0.7)
+        _table(slide, Inches(6.4), Inches(top + 0.5), [2.7, 1.3, 1.25, 1.1], rows,
+               ["Action", "Owner", review.meta.period, "2026 target"], size=12, row_h=row_h, header_size=12)
+
+
+STEP_SLIDES = {1: _step1, 2: _step2, 3: _step3, 4: _step4, 5: _step5}
 
 
 def _kpi_slide(prs, review, n):
-    slide = _new_slide(prs, "Value KPIs", review, n,
+    slide = _new_slide(prs, APPENDIX + "Value KPIs", review, n,
                        "Each figure carries its method status; ranges are shown where the value is an estimate.")
     if _no_data(review):
         _no_data_note(slide)
@@ -293,7 +334,7 @@ def _kpi_slide(prs, review, n):
 
 
 def _footprint_slide(prs, review, n):
-    slide = _new_slide(prs, "Footprint vs baseline", review, n,
+    slide = _new_slide(prs, APPENDIX + "Footprint vs baseline", review, n,
                        "Lindström allocated footprint as % of baseline: "
                        f"{clip(review.meta.baseline.get('name', ''), 60)}")
     if _no_data(review):
@@ -322,7 +363,7 @@ def _footprint_slide(prs, review, n):
 
 def _site_slide(prs, review, n):
     label, pri, groups, count = site_groups(review)
-    slide = _new_slide(prs, "Site highlights", review, n,
+    slide = _new_slide(prs, APPENDIX + "Site highlights", review, n,
                        f"Ranked by {label.lower()} (focus: {PRIORITY_LABEL.get(pri, pri)}) · "
                        f"{count} sites with data")
     if not count:
@@ -341,47 +382,8 @@ def _site_slide(prs, review, n):
          "see observations for context.", 12, False, GREY)
 
 
-def _obs_slide(prs, review, n):
-    slide = _new_slide(prs, "Observations & next steps", review, n)
-    obs = review.observations[:5]
-    _, tf = _textbox(slide, MARGIN, Inches(1.2), CONTENT_W, Inches(5.7))
-    if not obs:
-        _run(tf.paragraphs[0], "No observations for this filter", 18, True, GREY)
-        return
-    for i, o in enumerate(obs):
-        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        p.space_before = Pt(0 if i == 0 else 7)
-        _run(p, clip(o.title, 85), 15, True, NAVY)
-        _run(p, f"  [{o.method_status.value}]" + (f" {WARN}" if o.dq_warning else ""), 12, False, GREY)
-        _run(tf.add_paragraph(), clip(o.finding, 230), 12)
-        p = tf.add_paragraph()
-        _run(p, "Next step: ", 12, True, RED)
-        _run(p, clip(o.action, 130), 12, False, INK, italic=True)
-
-
-def _discussion_slide(prs, review, n):
-    slide = _new_slide(prs, "Discussion points & actions", review, n)
-    _, tf = _textbox(slide, MARGIN, Inches(1.25), Inches(5.5), Inches(5.6))
-    _heading(tf, "For the review meeting", first=True)
-    pts = [clip(p, 120) for p in review.narrative.discussion_points[:5]]
-    _bullets(tf, pts or ["No discussion points for this filter."], 14, space=8, first=False)
-    kpi_unit = {k.metric_id: k.unit for k in review.kpis}
-    rows = []
-    for a in review.actions[:6]:
-        v = a.get("value_2025")
-        target = a.get("target_2026")
-        rows.append([clip(a.get("text", ""), 75), clip(a.get("owner", ""), 22),
-                     fmt_number(v, kpi_unit.get(a.get("kpi_metric_id"), "")) if v is not None else "–",
-                     clip(str(target), 14) if target not in (None, "") else "to agree"])
-    _, tf = _textbox(slide, Inches(6.4), Inches(1.25), Inches(6.35), Inches(0.4))
-    _heading(tf, "Proposed actions", first=True)
-    if rows:
-        _table(slide, Inches(6.4), Inches(1.75), [2.7, 1.3, 1.25, 1.1], rows,
-               ["Action", "Owner", review.meta.period, "2026 target"], size=12, row_h=0.7, header_size=12)
-
-
 def _method_slide(prs, review, n):
-    slide = _new_slide(prs, "Methodology, assumptions & limitations", review, n)
+    slide = _new_slide(prs, APPENDIX + "Methodology & assumptions", review, n)
     m = review.methodology
     colw, gap = Inches(3.95), Inches(0.27)
     cols = [("Boundary & method", [clip(t, 150) for t in m.get("boundary", [])[:5]]),
@@ -406,7 +408,7 @@ def _method_slide(prs, review, n):
 
 
 def _appendix_slide(prs, review, n):
-    slide = _new_slide(prs, "Appendix: data readiness", review, n)
+    slide = _new_slide(prs, APPENDIX + "Data readiness", review, n)
     dq = review.data_quality
     warnings = dq.get("warnings", [])
     groups: dict[tuple, list] = {}
@@ -434,12 +436,13 @@ def build_pptx(review, out_path: Path) -> Path:
     prs = Presentation()
     prs.slide_width, prs.slide_height = SLIDE_W, SLIDE_H
     _cover(prs, review)
-    steps = [_story_slide, _exec_summary, _kpi_slide, _footprint_slide, _diy_slide]
-    if growth_view(review):
-        steps.append(_growth_slide)
-    steps += [_site_slide, _obs_slide, _discussion_slide, _method_slide, _appendix_slide]
-    for i, fn in enumerate(steps, start=2):
-        fn(prs, review, i)
+    n = 2
+    for step in meeting_steps(review):
+        STEP_SLIDES[step["n"]](prs, review, n, step)
+        n += 1
+    for fn in (_kpi_slide, _footprint_slide, _site_slide, _method_slide, _appendix_slide):
+        fn(prs, review, n)
+        n += 1
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     prs.save(out_path)

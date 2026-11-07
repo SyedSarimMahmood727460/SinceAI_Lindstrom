@@ -11,7 +11,8 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from export.format import fmt_range, fmt_value
-from export.sections import _focus_text, _no_internal, NET_PROMPT, NOT_IN_TOTAL, SOURCE_LABEL, diy_view, growth_view
+from export.sections import (_focus_text, _no_internal, NET_PROMPT, NOT_IN_TOTAL, SOURCE_LABEL, diy_view,
+                             growth_view, meeting_steps, step_figures)
 
 HEAD_FILL = PatternFill("solid", fgColor="1B2A4A")
 HEAD_FONT = Font(bold=True, color="FFFFFF")
@@ -57,6 +58,15 @@ def build_xlsx(review, out_path: Path, audience: str = "kam") -> Path:
     gv = growth_view(review)
     disc = m.disclaimer
 
+    # Meeting: one row per step of the guided meeting, in order (compact numbers)
+    steps = meeting_steps(review)
+    ws = _sheet(wb, "Meeting", ["Step", "Message", "Figures", "What to say"],
+                [[st["title"], st["message"], step_figures(st), st["what_to_say"]] for st in steps],
+                [26, 70, 70, 60], disc)
+    ws.append([])
+    ws.append([f"{disc} · run {m.run_id}"])
+    ws.cell(ws.max_row, 1).font = Font(bold=True, color="D71920")
+
     # Summary
     rows = [["Disclaimer", disc],
             ["Audience", "Customer" if audience == "customer"
@@ -67,7 +77,7 @@ def build_xlsx(review, out_path: Path, audience: str = "kam") -> Path:
             ["Service line", m.service_line or ", ".join(m.service_lines) or ""],
             ["Run id", m.run_id], ["Generated at", m.generated_at.isoformat(timespec="seconds")],
             ["Assumption set version", m.assumption_set_version],
-            ["Sheets", "Story, KPIs, Sites, Observations, Actions, DIY comparison, "
+            ["Sheets", "Meeting, Summary, Story, KPIs, Sites, Observations, Actions, DIY comparison, "
                        + ("Growth, " if gv else "") + "Inputs, Assumptions, Data quality"]]
     ws = _sheet(wb, "Summary", ["Item", "Value"], rows, [28, 90], disc)
     ws["A2"].font = ws["B2"].font = Font(bold=True, color="D71920")

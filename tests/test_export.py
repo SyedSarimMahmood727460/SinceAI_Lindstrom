@@ -7,7 +7,9 @@ from pptx.util import Inches
 
 from api.build import build_review
 from api.review_model import ReviewModel, ReviewParams
+from config.loader import load_assumptions
 from export.pptx_builder import build_pptx, fmt_value
+from model.inputs_store import save_inputs
 
 FIXTURE = Path(__file__).parent / "fixtures" / "review_northstar.json"
 
@@ -31,20 +33,67 @@ def _slides_text(path):
     return out
 
 
+def slide_titles(path):
+    """The title of each slide: its first non-empty text frame (header bars carry no text)."""
+    out = []
+    for slide in Presentation(str(path)).slides:
+        texts = [sh.text_frame.text for sh in slide.shapes if sh.has_text_frame and sh.text_frame.text.strip()]
+        out.append(texts[0] if texts else "")
+    return out
+
+
+def slide_index(path, title):
+    return next(i for i, t in enumerate(slide_titles(path)) if t.startswith(title))
+
+
 @pytest.fixture(scope="module")
 def deck(review, tmp_path_factory):
     return build_pptx(review, tmp_path_factory.mktemp("deck") / "r.pptx")
 
 
-def test_pptx_has_eleven_slides(deck):
-    assert len(Presentation(str(deck)).slides) == 11
+@pytest.fixture
+def full_deck(con, tmp_path, monkeypatch):
+    """A deck with every step: contract price (net + bars) and growth (step 4)."""
+    monkeypatch.setenv("VR_INPUTS_DIR", str(tmp_path / "inputs"))
+    save_inputs("CUST001", {"contract_price_eur_per_year": 1200000, "extra_sites": 4,
+                            "extra_service_lines": ["mats"]}, load_assumptions()["dto_inputs"])
+    rv = build_review(con, ReviewParams(account_id="CUST001"))
+    return build_pptx(rv, tmp_path / "full.pptx")
+
+
+STEPS = ["1 · What you got", "2 · Vs doing it yourself", "3 · Where to improve"]
+APPENDIX = ["Appendix · Value KPIs", "Appendix · Footprint vs baseline", "Appendix · Site highlights",
+            "Appendix · Methodology & assumptions", "Appendix · Data readiness"]
+
+
+def test_pptx_meeting_order(deck, full_deck):
+    titles = slide_titles(deck)  # no growth inputs: step 4 is absent
+    assert titles[0].startswith("LINDSTRÖM") and "REVIEW" in titles[0]  # the cover
+    assert titles[1:4] == STEPS
+    assert titles[4] == "5 · Agree next steps" and not any(t.startswith("4 · ") for t in titles)
+    assert titles[5:] == APPENDIX
+    full = slide_titles(full_deck)
+    assert full[1:4] == STEPS and full[4] == "4 · Grow together" and full[5] == "5 · Agree next steps"
+    assert full[6:] == APPENDIX
 
 
 def test_pptx_numbers_match_review(review, deck):
     kpi = next(k for k in review.kpis if k.metric_id == "co2_saving_kg")
+    text = _slides_text(deck)[slide_index(deck, "Appendix · Value KPIs")]
+    assert fmt_value(kpi) in text
+    assert "[ESTIMATED]" in text
+
+
+def test_pptx_steps_use_compact(review, deck):
+    from export.format import fmt_compact_value
     texts = _slides_text(deck)
-    assert fmt_value(kpi) in texts[3]
-    assert "[ESTIMATED]" in texts[3]
+    k = {x.metric_id: x for x in review.kpis}
+    step1 = texts[slide_index(deck, "1 · What you got")]
+    assert fmt_compact_value(k["water_saving_l"]) in step1 and "255 t CO₂e" in step1
+    step2 = texts[slide_index(deck, "2 · Vs doing it yourself")]
+    assert "€1.96M" in step2 and "explanatory, not in total" in step2
+    step3 = texts[slide_index(deck, "3 · Where to improve")]
+    assert "NorthStar Kraków" in step3 and "Typical site" in step3
 
 
 def test_pptx_footer_on_every_slide(review, deck):
@@ -57,11 +106,11 @@ def test_pptx_unicode_site_names(deck):
     texts = _slides_text(deck)
     highlights = next(t for t in texts if "Site highlights" in t)
     assert "Kraków" in highlights  # highest washed kg per wearer for NorthStar
-    assert "Västerås" in "\n".join(texts)
+    assert "Gdańsk" in "\n".join(texts)  # step 3: the next observations
 
 
 def test_kpi_slide_uses_headline_kpis(review, deck):
-    kpi_text = _slides_text(deck)[3]
+    kpi_text = _slides_text(deck)[slide_index(deck, "Appendix · Value KPIs")]
     shown = [k for k in review.kpis if k.customer_facing and k.display["headline"]][:8]
     assert len(shown) == 8
     positions = [kpi_text.index(k.label) for k in shown]
@@ -70,8 +119,10 @@ def test_kpi_slide_uses_headline_kpis(review, deck):
         assert fmt_value(k) in kpi_text
 
 
-def test_no_shape_runs_into_footer(deck):
-    prs = Presentation(str(deck))
+@pytest.mark.parametrize("which", ["deck", "full_deck"])
+def test_no_shape_runs_into_footer(which, request):
+    """Every slide, the step slides included (with net, bars and growth), stays above the footer."""
+    prs = Presentation(str(request.getfixturevalue(which)))
     footer_top = Inches(6.98)
     for i, slide in enumerate(prs.slides, 1):
         if i == 1:  # cover has a full-bleed background
@@ -92,7 +143,11 @@ def test_pptx_empty_filter(con, tmp_path):
     rv = build_review(con, ReviewParams(account_id="CUST002", product="P1004"))
     path = build_pptx(rv, tmp_path / "e.pptx")
     texts = _slides_text(path)
-    assert len(texts) == 11 and "No data for this filter" in texts[3]
+    assert slide_titles(path)[1:4] == STEPS
+    assert "No data for this filter" in texts[slide_index(path, "Appendix · Value KPIs")]
+    assert "no data for this filter" in texts[slide_index(path, "1 · What you got")]
+    for t in texts:
+        assert "Prototype · synthetic data · not audited" in t and f"run {rv.meta.run_id}" in t
 
 
 def test_pptx_appendix_names_laundry_and_period(con, tmp_path):

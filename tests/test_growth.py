@@ -8,7 +8,7 @@ from api.build import build_review
 from api.main import app
 from api.review_model import ReviewParams
 from config.loader import load_assumptions, load_yaml
-from export.format import fmt_value
+from export.format import fmt_compact_value
 from metrics.engine import Engine
 from metrics.growth import OVERLAP_NOTE, compute_growth
 from model.inputs_store import save_inputs, validate_inputs
@@ -219,8 +219,8 @@ def test_growth_narrative_line_has_values(engine, con, tmp_path, monkeypatch):
     g = _growth(engine, {"extra_sites": 4})
     line = g["narrative_line"]
     assert line.startswith("Bringing 4 more sites on board would avoid about ")
-    assert fmt_value(g["totals"]["diy_cost_avoided"]) in line
-    assert fmt_value(g["totals"]["co2_saving_kg"]) in line and "(between " in line
+    assert fmt_compact_value(g["totals"]["diy_cost_avoided"]) in line
+    assert fmt_compact_value(g["totals"]["co2_saving_kg"]) in line and "(between " in line
     assert "None" not in line and "nan" not in line.lower()
     gp = _growth(engine, {"extra_sites": 4, "extra_service_lines": ["mats"],
                           "expansion_price_eur_per_site_year": 20000})
@@ -266,10 +266,10 @@ def test_growth_net_range_sign(engine):
             update={"value": base, "range": Range(low=low, base=base, high=high)})
         return _narrative(gp["levers"], {**gp["totals"], "net": net})
 
-    assert ("the service would cost about 297,100 EUR less than doing it yourself — but the "
-            "range runs from 297,100 EUR more to 1,079,363 EUR less, so it depends on the "
+    assert ("the service would cost about €297k less than doing it yourself — but the "
+            "range runs from €297k more to €1.08M less, so it depends on the "
             "assumptions.") in line(-297100, 297100, 1079363)
-    assert ("the service would cost about 500,000 EUR (between 100,000 and 900,000 EUR) more "
+    assert ("the service would cost about €500k (between €100k and €900k) more "
             "than doing it yourself.") in line(-900000, -500000, -100000)
-    assert ("the service would cost about 500,000 EUR (between 100,000 and 900,000 EUR) less "
+    assert ("the service would cost about €500k (between €100k and €900k) less "
             "than doing it yourself.") in line(100000, 500000, 900000)

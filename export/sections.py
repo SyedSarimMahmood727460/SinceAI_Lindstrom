@@ -6,7 +6,7 @@ show the same text. Builders decide layout; this module decides wording.
 """
 from __future__ import annotations
 
-from export.format import fmt_number, fmt_range, fmt_value
+from export.format import fmt_compact, fmt_compact_range, fmt_compact_value, fmt_number, fmt_range, fmt_value
 
 WARN = "⚠"
 PRIORITY_LABEL = {"water": "Water", "emissions": "Emissions", "cost": "Cost & utilisation",
@@ -144,7 +144,7 @@ def diy_view(review) -> dict | None:
 # ---------------------------------------------------------------- growth
 
 GROWTH_COLUMNS = [("diy_cost_avoided", "Cost avoided per year"), ("staff_hours_freed", "Staff hours freed"),
-                  ("co2_saving_kg", "CO2e saved"), ("water_saving_l", "Water saved")]
+                  ("co2_saving_kg", "CO₂e saved"), ("water_saving_l", "Water saved")]
 
 
 def growth_view(review) -> dict | None:
@@ -170,6 +170,159 @@ def growth_view(review) -> dict | None:
     if net is not None and net.value is not None:
         word = "less" if net.value >= 0 else "more"
         notes.append(f"Including the Lindström expansion price, the service would cost "
-                     f"{fmt_number(abs(net.value), net.unit)} {word} than doing it yourself.")
+                     f"{fmt_compact(abs(net.value), net.unit)} {word} than doing it yourself.")
     return {"rows": rows, "notes": notes, "statement": g.get("statement") or g.get("narrative_line") or "",
             "columns": [c for _, c in GROWTH_COLUMNS]}
+
+
+# ---------------------------------------------------------------- the meeting steps (design §3, §7)
+# The step exports follow the guided meeting: every figure here is compact (€1.96M, 255 t CO₂e)
+# and read from the ReviewModel (KPIs, dto, story facts, growth); nothing is computed here.
+
+NO_DATA = "no data for this filter"
+NO_STANDOUT = "No site stands out — performance is even across sites."
+APPENDIX = "Appendix · "
+STEP_TITLES = {1: "1 · What you got", 2: "2 · Vs doing it yourself", 3: "3 · Where to improve",
+               4: "4 · Grow together", 5: "5 · Agree next steps"}
+
+
+def _present(m) -> bool:
+    return m is not None and m.value is not None
+
+
+def _tile(label: str, m, context: str = "") -> dict:
+    """A hero tile: label, compact value, compact range line and a context line.
+    A missing metric reads '—' with 'no data for this filter' (never an empty tile)."""
+    if not _present(m):
+        return {"label": label, "value": fmt_compact(None, ""), "range": "", "context": NO_DATA}
+    return {"label": label, "value": fmt_compact_value(m), "range": fmt_compact_range(m),
+            "context": context}
+
+
+def _bare_range(m) -> str:
+    return fmt_compact_range(m).removeprefix("range ") or "–"
+
+
+def has_growth(review) -> bool:
+    """Step 4 exists only when growth has totals (design §3)."""
+    g = review.growth
+    return bool(g and g.get("totals") and g.get("levers"))
+
+
+def _step1(review, cards):
+    k = {x.metric_id: x for x in _customer_kpis(review)}
+    hours = (review.dto.convenience or {}).get("staff_hours_freed") if review.dto else None
+    on_time = k.get("on_time_rate")
+    on_time_line = f"On-time delivery {fmt_compact_value(on_time)}" if _present(on_time) else ""
+    tiles = [_tile("Water saved", k.get("water_saving_l")), _tile("CO₂e avoided", k.get("co2_saving_kg"))]
+    if _present(hours):
+        tiles.append(_tile("Staff hours freed", hours, on_time_line))
+    else:  # never an empty tile: on-time delivery takes the third place
+        tiles.append(_tile("On-time delivery", on_time))
+    card = cards.get("value_delivered") or {}
+    return {"n": 1, "title": STEP_TITLES[1],
+            "message": f"What {review.meta.node.name} got from Lindström in {review.meta.period}",
+            "tiles": tiles, "statement": card.get("statement", ""), "relatable": card.get("relatable") or "",
+            "what_to_say": card.get("what_to_say", "")}
+
+
+def _step2(review, cards):
+    d = review.dto
+    card = cards.get("vs_diy") or {}
+    step = {"n": 2, "title": STEP_TITLES[2], "statement": card.get("statement", ""),
+            "what_to_say": card.get("what_to_say", ""), "tiles": [], "lines": [], "bars": [], "notes": []}
+    if d is None or not _present(d.diy_total):
+        return {**step, "message": "No do-it-yourself comparison for this filter"}
+    net = d.net if _present(d.net) else None
+    contract = d.contract_price if _present(d.contract_price) else None
+    if net is not None:
+        word = "less" if net.value >= 0 else "more"
+        step["message"] = (f"About {fmt_compact(abs(net.value), net.unit)} {word} with Lindström "
+                           "than doing it yourself")
+        step["tiles"].append(_tile("Net: doing it yourself minus Lindström", net, "per year"))
+    else:
+        step["message"] = f"Doing it yourself would cost about {fmt_compact_value(d.diy_total)} a year"
+    step["tiles"].append(_tile("Doing it yourself would cost", d.diy_total, "per year"))
+    hours = (d.convenience or {}).get("staff_hours_freed")
+    if _present(hours):
+        step["tiles"].append(_tile("Staff hours freed", hours, "of your staff's time"))
+    step["lines"] = [[ln.label if ln.in_total else f"{ln.label} ({NOT_IN_TOTAL})",
+                      fmt_compact_value(ln.diy), _bare_range(ln.diy)]
+                     for ln in d.lines if _present(ln.diy)]
+    step["lines"].append(["Do-it-yourself total", fmt_compact_value(d.diy_total), _bare_range(d.diy_total)])
+    if contract is not None:
+        step["lines"].append(["Lindström contract price", fmt_compact_value(contract), _bare_range(contract)])
+        step["bars"].append(("Lindström contract", contract.value, fmt_compact_value(contract)))
+    step["bars"].append(("Doing it yourself", d.diy_total.value, fmt_compact_value(d.diy_total)))
+    if d.missing_lines:
+        labels = {x.id: x.label for x in d.lines}
+        step["notes"].append("Partial total: no data for "
+                             + ", ".join(labels.get(i, i) for i in d.missing_lines) + ".")
+    if d.hygiene_note:
+        step["notes"].append(d.hygiene_note)
+    return step
+
+
+def _step3(review, cards):
+    card = cards.get("biggest_improvement")
+    obs = [o for o in review.observations if o.rule_id not in ("R7", "R8")]
+    facts = (card or {}).get("facts")
+    tiles = []
+    if facts:  # R4 or a fallback without a site pair: statement only, no tiles
+        tiles = [{"label": facts["site_name"], "value": fmt_compact(facts["value"], facts["unit"]),
+                  "range": "", "context": facts["metric_label"]},
+                 {"label": "Typical site", "value": fmt_compact(facts["typical"], facts["unit"]),
+                  "range": "", "context": "the middle of your sites"}]
+    return {"n": 3, "title": STEP_TITLES[3], "message": card["statement"] if card else NO_STANDOUT,
+            "tiles": tiles, "statement": "", "what_to_say": (card or {}).get("what_to_say", ""),
+            "next": [(o.title.replace(" (relative)", ""), o.action) for o in obs[1:3]]}
+
+
+def _compact_cells(src) -> list[str]:
+    return [fmt_compact_value(src[k]) if _present(src.get(k)) else "–" for k, _ in GROWTH_COLUMNS]
+
+
+def _step4(review, cards):
+    g = review.growth
+    t = g["totals"]
+    gv = growth_view(review)
+    return {"n": 4, "title": STEP_TITLES[4],
+            "message": g.get("statement") or "What if more sites and services came to Lindström?",
+            "tiles": [_tile("Cost avoided per year", t.get("diy_cost_avoided")),
+                      _tile("CO₂e saved", t.get("co2_saving_kg")),
+                      _tile("Staff hours freed", t.get("staff_hours_freed"))],
+            "levers": [[lv["label"], *_compact_cells(lv)] for lv in g["levers"]] + [["Total", *_compact_cells(t)]],
+            "columns": [c for _, c in GROWTH_COLUMNS], "notes": gv["notes"] if gv else [],
+            "statement": "", "what_to_say": g.get("what_to_say") or ""}
+
+
+def _step5(review, cards):
+    kpi_unit = {k.metric_id: k.unit for k in review.kpis}
+    actions = []
+    for a in review.actions:
+        v, target = a.get("value_2025"), a.get("target_2026")
+        actions.append([a.get("text", ""), a.get("owner", ""),
+                        fmt_compact(v, kpi_unit.get(a.get("kpi_metric_id"), "")) if v is not None else "–",
+                        str(target) if target not in (None, "") else "to agree"])
+    card = cards.get("whats_next") or {}
+    return {"n": 5, "title": STEP_TITLES[5], "message": "Agree the next steps", "tiles": [],
+            "points": list(review.narrative.discussion_points), "actions": actions, "statement": "",
+            "what_to_say": card.get("what_to_say")
+            or "Agree an owner and a date for each step before the meeting ends."}
+
+
+def meeting_steps(review) -> list[dict]:
+    """The guided meeting in order: steps 1-3, step 4 only when growth has totals, then step 5.
+    Each step: n, title ('1 · What you got'), message, tiles [{label, value, range, context}],
+    statement, what_to_say, plus step content (lines/bars/notes, next, levers/notes, points/actions)."""
+    cards = {c["id"]: c for c in review.story}
+    steps = [_step1(review, cards), _step2(review, cards), _step3(review, cards)]
+    if has_growth(review):
+        steps.append(_step4(review, cards))
+    return steps + [_step5(review, cards)]
+
+
+def step_figures(step: dict) -> str:
+    """One line of the step's hero figures (the Excel Meeting sheet)."""
+    return "; ".join(f"{t['label']}: {t['value']}" + (f" ({t['range']})" if t["range"] else "")
+                     for t in step["tiles"])

@@ -7,7 +7,7 @@ from api.build import build_review
 from api.main import app
 from api.review_model import ReviewParams
 from config.loader import load_yaml
-from export.format import fmt_value
+from export.format import fmt_compact_value
 from insights.story import CARD_ORDER, build_story
 
 CARD_KEYS = {"id", "title", "statement", "relatable", "what_to_say", "detail_view", "value_refs"}
@@ -19,7 +19,7 @@ def test_story_cards_northstar(con):
     assert ids == [i for i in CARD_ORDER if i in ids]
     assert "value_delivered" in ids and "growth" not in ids  # growth arrives with Task 6
     for c in r.story:
-        assert set(c) == CARD_KEYS
+        assert set(c) == CARD_KEYS | ({"facts"} if c["id"] == "biggest_improvement" else set())
         text = c["statement"] + (c["relatable"] or "")
         assert not re.search(r"\bNone\b|\bnan\b", text, re.I)
     assert r.story == build_story(r)
@@ -30,9 +30,9 @@ def test_story_uses_review_values(con):
         r = build_review(con, ReviewParams(account_id="CUST001", sensitivity=sens))
         k = {x.metric_id: x for x in r.kpis}
         st = next(c for c in r.story if c["id"] == "value_delivered")["statement"]
-        assert fmt_value(k["water_saving_l"]) in st or fmt_value(k["co2_saving_kg"]) in st
+        assert fmt_compact_value(k["water_saving_l"]) in st or fmt_compact_value(k["co2_saving_kg"]) in st
     d = next(c for c in r.story if c["id"] == "vs_diy")["statement"]
-    assert fmt_value(r.dto.diy_total) in d and "(between " in d
+    assert fmt_compact_value(r.dto.diy_total) in d and "(between " in d
 
 
 def test_story_growth_card_when_present(con):
@@ -133,15 +133,15 @@ def test_story_net_range_sign(con, tmp_path, monkeypatch):
     assert r.dto.net is not None
     # straddling zero: the sign is spelled out, never "between 297,100 and 1,079,363 more"
     st = _net_story(r, -297100, 297100, 1079363)
-    assert ("about 297,100 EUR more than the service — but the range runs from 297,100 EUR "
-            "less to 1,079,363 EUR more, so it depends on the assumptions.") in st
+    assert ("about €297k more than the service — but the range runs from €297k "
+            "less to €1.08M more, so it depends on the assumptions.") in st
     assert "between" not in st.split("contract of")[1].split("It also")[0]
     # fully negative: "less", with the absolute range
     st = _net_story(r, -900000, -500000, -100000)
-    assert "about 500,000 EUR (between 100,000 and 900,000 EUR) less than the service." in st
+    assert "about €500k (between €100k and €900k) less than the service." in st
     # fully positive: "more"
     st = _net_story(r, 100000, 500000, 900000)
-    assert "about 500,000 EUR (between 100,000 and 900,000 EUR) more than the service." in st
+    assert "about €500k (between €100k and €900k) more than the service." in st
 
 
 def test_relatable_omitted_below_one(con):
@@ -158,3 +158,29 @@ def test_relatable_omitted_below_one(con):
         "≈ the yearly CO₂ emissions of one average Finnish passenger car (illustrative comparison)")
     rel = next(c for c in r.story if c["id"] == "value_delivered")["relatable"]
     assert "yearly CO₂ emissions of" in rel and "cars" in rel
+
+
+def test_story_uses_compact(con):
+    r = build_review(con, ReviewParams(account_id="CUST001"))
+    cards = {c["id"]: c for c in r.story}
+    vd = cards["value_delivered"]["statement"]
+    assert "1,407 m³" in vd and "255 t CO₂e" in vd
+    assert "€1.96M" in cards["vs_diy"]["statement"]
+    assert " EUR" not in cards["vs_diy"]["statement"]
+
+
+def test_biggest_facts_present(con):
+    r = build_review(con, ReviewParams(account_id="CUST001"))
+    f = next(c for c in r.story if c["id"] == "biggest_improvement")["facts"]
+    assert set(f) == {"site_name", "metric_label", "value", "typical", "unit"}
+    assert f["site_name"] == "NorthStar Kraków" and f["metric_label"] and f["unit"]
+    assert abs(f["value"] - 67.0) < 0.1 and abs(f["typical"] - 48.8) < 0.1
+
+
+def test_biggest_facts_absent_for_r4(con):
+    r = build_review(con, ReviewParams(account_id="CUST001"))
+    o = next(o for o in r.observations if o.rule_id not in ("R7", "R8"))
+    r4 = o.model_copy(update={"rule_id": "R4", "evidence": []})
+    stub = r.model_copy(update={"observations": [r4]})
+    card = next(c for c in build_story(stub) if c["id"] == "biggest_improvement")
+    assert card["facts"] is None and card["statement"] == r4.finding

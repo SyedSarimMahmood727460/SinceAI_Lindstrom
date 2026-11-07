@@ -1,4 +1,4 @@
-"""PDF export: the same sections as the deck, rendered with reportlab (pure Python).
+"""PDF export in meeting order, the same sections as the deck, rendered with reportlab (pure Python).
 
 Reads only the ReviewModel; numbers go through export.format (via export.sections and the
 shared helpers of the PPTX builder). Body text uses matplotlib's bundled DejaVuSans so
@@ -21,9 +21,9 @@ from reportlab.platypus import (BaseDocTemplate, Frame, Image, KeepTogether, Pag
                                 Paragraph, Spacer, Table, TableStyle)
 
 from export import charts
-from export.format import fmt_number, fmt_range, fmt_value
-from export.sections import (PRIORITY_LABEL, _customer_kpis, _focus_text, _no_data, _no_internal, _top_kpis,
-                             diy_view, growth_view, site_groups, tag)
+from export.format import fmt_range, fmt_value
+from export.sections import (APPENDIX, PRIORITY_LABEL, _customer_kpis, _focus_text, _no_data, _no_internal,
+                             _top_kpis, diy_view, meeting_steps, site_groups, tag)
 
 NAVY = colors.HexColor("#1B2A4A")
 RED = colors.HexColor("#D71920")
@@ -66,6 +66,8 @@ def _styles() -> dict[str, ParagraphStyle]:
         "cellb": ParagraphStyle("cellb", fontSize=9, leading=11.5, **{**base, "fontName": FONT_B}),
         "head": ParagraphStyle("head", fontSize=9, leading=11.5,
                                **{**base, "fontName": FONT_B, "textColor": colors.white}),
+        "tile_l": ParagraphStyle("tile_l", fontSize=9, leading=12, **{**base, "fontName": FONT_B, "textColor": GREY}),
+        "tile_v": ParagraphStyle("tile_v", fontSize=22, leading=27, **{**base, "fontName": FONT_B, "textColor": NAVY}),
         "cover_t": ParagraphStyle("cover_t", fontSize=34, leading=40, **{**base, "fontName": FONT_B,
                                                                          "textColor": colors.white}),
         "cover_s": ParagraphStyle("cover_s", fontSize=18, leading=24, **{**base, "textColor": colors.white}),
@@ -178,43 +180,119 @@ def _cover(review, st):
             + [_p(t, st["cover_i"]) for t in info])
 
 
-def _story(review, st):
-    out = _section("Customer story", st, "What the service delivers, in plain language; "
-                   "every figure is an estimate with a range.")
-    if not review.story:
-        return out + [_p("No story for this filter", st["h2"])]
-    for c in review.story:
-        block = [_p(c["title"], st["h2"]), _p(c["statement"], st["body"])]
-        if c.get("relatable"):
-            block.append(_p(c["relatable"], st["italic"]))
-        if c.get("what_to_say"):
-            block.append(_p("Worth asking: " + c["what_to_say"], st["small"]))
-        out.append(KeepTogether(block))
+# ---------------------------------------------------------------- the meeting steps (design §7)
+
+def _tiles(tiles, st):
+    """The hero row: 2–3 tiles with label, big compact number, range line and context line."""
+    width = (PAGE[0] - 2 * MARGIN) / len(tiles)
+    cells = []
+    for t in tiles:
+        cell = [_p(t["label"], st["tile_l"]), _p(t["value"], st["tile_v"])]
+        if t["range"]:
+            cell.append(_p(t["range"], st["small"]))
+        if t["context"]:
+            cell.append(_p(t["context"], st["italic"]))
+        cells.append(cell)
+    tbl = Table([cells], colWidths=[width] * len(tiles))
+    style = [("VALIGN", (0, 0), (-1, -1), "TOP"), ("BACKGROUND", (0, 0), (-1, -1), LIGHT),
+             ("LEFTPADDING", (0, 0), (-1, -1), 9), ("TOPPADDING", (0, 0), (-1, -1), 6),
+             ("BOTTOMPADDING", (0, 0), (-1, -1), 6), ("LINEAFTER", (0, 0), (-2, 0), 4, colors.white)]
+    style += [("LINEBEFORE", (i, 0), (i, 0), 2.5, RED) for i in range(len(tiles))]
+    tbl.setStyle(TableStyle(style))
+    return [tbl, Spacer(1, 4 * mm)]
+
+
+def _say(text, st):
+    if not text:
+        return []
+    box = Table([[Paragraph("<b>What to say:</b> " + escape(text), st["body"])]],
+                colWidths=[PAGE[0] - 2 * MARGIN])
+    box.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), LIGHT), ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                             ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    return [Spacer(1, 4 * mm), KeepTogether([box])]
+
+
+def _step_head(review, st, step, message=True):
+    out = _section(step["title"], st, step["message"] if message else None)
+    return out + (_tiles(step["tiles"], st) if step["tiles"] else [])
+
+
+def _step1(review, st, step):
+    out = _step_head(review, st, step)
+    out.append(_p(step["statement"] or "No data for this filter", st["body"]))
+    if step["relatable"]:
+        out.append(_p(step["relatable"], st["italic"]))
+    return out + _say(step["what_to_say"], st)
+
+
+def _bars(bars, st):
+    """Horizontal bars: Lindström contract vs the do-it-yourself total (lengths from the values)."""
+    from reportlab.graphics.shapes import Drawing, Rect, String
+    w, bar_h, label_h, gap = 85 * mm, 6 * mm, 5 * mm, 4 * mm
+    biggest = max(v for _, v, _ in bars) or 1
+    step = bar_h + label_h + gap
+    d = Drawing(w, len(bars) * step)
+    for i, (label, value, text) in enumerate(bars):
+        y = (len(bars) - 1 - i) * step
+        d.add(Rect(0, y, max(value, 0) / biggest * w, bar_h, strokeColor=None,
+                   fillColor=NAVY if label.startswith("Lindström") else GREY))
+        d.add(String(0, y + bar_h + 1.5 * mm, f"{label}: {text}", fontName=FONT, fontSize=9, fillColor=INK))
+    return d
+
+
+def _step2(review, st, step):
+    out = _step_head(review, st, step)
+    if not step["lines"]:
+        return out + [_p("No comparison for this filter", st["h2"])] + _say(step["what_to_say"], st)
+    table = _table(step["lines"], [95, 30, 45], st, ["Per year", "Value", "Range (low – high)"])
+    side = [_p("Lindström contract vs doing it yourself", st["h2"]), _bars(step["bars"], st)]
+    side += [_p(t, st["small"]) for t in step["notes"]]
+    t = Table([[table, side]], colWidths=[176 * mm, 91 * mm])
+    t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
+    out += [t] + _say(step["what_to_say"], st)
+    v = diy_view(review)
+    if v and v["inputs"]:
+        out.append(_p("The numbers behind this comparison", st["h2"]))
+        out.append(_table([[i["label"], i["value"], i["range"], i["source"]] for i in v["inputs"]],
+                          [100, 40, 55, 60], st, ["Input", "Value", "Range (low – high)", "Source"]))
     return out
 
 
-def _exec(review, st):
-    out = _section("Executive summary", st)
-    summary = (review.narrative.exec_summary or "").strip()
-    if _no_data(review):
-        return out + [_p("No data for this filter", st["h2"]),
-                      _p("There is no service activity for the selected customer, period and product "
-                         "filter. Change the filter to see results.", st["body"])]
-    if summary:
-        out += [_p("Summary", st["h2"]), _p(summary, st["body"])]
-    else:
-        heads = [k for k in _customer_kpis(review) if k.value is not None][:4]
-        out += [_p("Headline results", st["h2"])]
-        out += _bullets([f"{k.label}: {fmt_value(k)} {tag(k)}" for k in heads], st)
-        if review.observations[:3]:
-            out += [_p("What stands out", st["h2"])] + _bullets([o.title for o in review.observations[:3]], st)
-    if (review.circularity or {}).get("repairs_by_month"):
-        out += [Spacer(1, 3 * mm), _image(charts.repairs_by_month_chart(review), 110)]
-    return out
+def _step3(review, st, step):
+    out = _step_head(review, st, step)
+    if step["next"]:
+        out.append(_p("Also worth a look", st["h2"]))
+        for title, action in step["next"]:
+            out.append(KeepTogether([_p(title, st["cellb"]),
+                                     Paragraph(f"<b>Next step:</b> <i>{escape(action)}</i>", st["body"])]))
+    return out + _say(step["what_to_say"], st)
+
+
+def _step4(review, st, step):
+    out = _step_head(review, st, step)
+    out.append(_table(step["levers"], [75, 48, 48, 48, 48], st, ["Lever", *step["columns"]]))
+    out.append(Spacer(1, 2 * mm))
+    out += _bullets(step["notes"] + ["All figures are estimates per year, scaled from your own current data; "
+                                     "ranges run from low to high."], st, "small")
+    return out + _say(step["what_to_say"], st)
+
+
+def _step5(review, st, step):
+    out = _step_head(review, st, step, message=False)
+    out.append(_p("For the review meeting", st["h2"]))
+    out += _bullets(step["points"][:8] or ["No discussion points for this filter."], st)
+    if step["actions"]:
+        out.append(_p("Proposed actions", st["h2"]))
+        out.append(_table(step["actions"], [110, 55, 40, 40], st,
+                          ["Action", "Owner", review.meta.period, "2026 target"]))
+    return out + _say(step["what_to_say"], st)
+
+
+STEP_SECTIONS = {1: _step1, 2: _step2, 3: _step3, 4: _step4, 5: _step5}
 
 
 def _kpis(review, st):
-    out = _section("Value KPIs", st, "Each figure carries its method status; ranges are shown where "
+    out = _section(APPENDIX + "Value KPIs", st, "Each figure carries its method status; ranges are shown where "
                    "the value is an estimate.")
     if _no_data(review):
         return out + [_p("No data for this filter", st["h2"])]
@@ -228,7 +306,7 @@ def _kpis(review, st):
 
 
 def _footprint(review, st):
-    out = _section("Footprint vs baseline", st, "Lindström allocated footprint as % of baseline: "
+    out = _section(APPENDIX + "Footprint vs baseline", st, "Lindström allocated footprint as % of baseline: "
                    f"{review.meta.baseline.get('name', '')}")
     if _no_data(review):
         return out + [_p("No data for this filter", st["h2"])]
@@ -253,36 +331,9 @@ def _footprint(review, st):
     return out + [t]
 
 
-def _diy(review, st):
-    v = diy_view(review)
-    out = _section("Service vs do-it-yourself", st, "What you would spend doing it yourself instead of "
-                   f"using the service (baseline: {review.meta.baseline.get('name', '')}).")
-    if v is None:
-        return out + [_p("No comparison for this filter", st["h2"])]
-    rows = v["rows"] + ([v["hours_row"]] if v["hours_row"] else [])
-    out.append(_table(rows, [100, 40, 75, 40], st, ["Item (per year)", "Value", "Range (low – high)", "Status"]))
-    out.append(Spacer(1, 3 * mm))
-    out += _bullets(v["notes"] + ([v["hygiene"]] if v["hygiene"] else []), st, "small")
-    out.append(_p("Your numbers", st["h2"]))
-    out.append(_table([[i["label"], i["value"], i["range"], i["source"]] for i in v["inputs"]],
-                      [100, 40, 55, 60], st, ["Input", "Value", "Range (low – high)", "Source"]))
-    return out
-
-
-def _growth(review, st):
-    v = growth_view(review)
-    out = _section("Growth opportunities", st, v["statement"])
-    rows = [[r[0]] + [f"{val}" + (f" ({rng})" if rng else "") for val, rng in r[1:]] for r in v["rows"]]
-    out.append(_table(rows, [50, 62, 48, 52, 45], st, ["Lever", *v["columns"]]))
-    out.append(Spacer(1, 3 * mm))
-    out += _bullets(v["notes"] + ["All figures are estimates per year, scaled from your own current data; "
-                                  "ranges run from low to high."], st, "small")
-    return out
-
-
 def _sites(review, st):
     label, pri, groups, count = site_groups(review)
-    out = _section("Site highlights", st, f"Ranked by {label.lower()} (focus: "
+    out = _section(APPENDIX + "Site highlights", st, f"Ranked by {label.lower()} (focus: "
                    f"{PRIORITY_LABEL.get(pri, pri)}) · {count} sites with data")
     if not count:
         return out + [_p("No data for this filter", st["h2"])]
@@ -297,38 +348,9 @@ def _sites(review, st):
                      "see observations for context.", st["small"])]
 
 
-def _observations(review, st):
-    out = _section("Observations & next steps", st)
-    if not review.observations:
-        return out + [_p("No observations for this filter", st["h2"])]
-    for o in review.observations[:8]:
-        out.append(KeepTogether([
-            _p(f"{o.title}  [{o.method_status.value}]" + (" ⚠" if o.dq_warning else ""), st["h2"]),
-            _p(o.finding, st["body"]),
-            Paragraph(f"<b>Next step:</b> <i>{escape(o.action)}</i>", st["body"])]))
-    return out
-
-
-def _discussion(review, st):
-    out = _section("Discussion points & actions", st)
-    out.append(_p("For the review meeting", st["h2"]))
-    out += _bullets(review.narrative.discussion_points[:8] or ["No discussion points for this filter."], st)
-    kpi_unit = {k.metric_id: k.unit for k in review.kpis}
-    rows = []
-    for a in review.actions:
-        v, target = a.get("value_2025"), a.get("target_2026")
-        rows.append([a.get("text", ""), a.get("owner", ""),
-                     fmt_number(v, kpi_unit.get(a.get("kpi_metric_id"), "")) if v is not None else "–",
-                     str(target) if target not in (None, "") else "to agree"])
-    if rows:
-        out.append(_p("Proposed actions", st["h2"]))
-        out.append(_table(rows, [110, 55, 40, 40], st, ["Action", "Owner", review.meta.period, "2026 target"]))
-    return out
-
-
 def _method(review, st):
     m = review.methodology
-    out = _section("Methodology, assumptions & limitations", st)
+    out = _section(APPENDIX + "Methodology & assumptions", st)
     out += [_p("Boundary & method", st["h2"])] + _bullets(m.get("boundary", []), st)
     out += [_p("Limitations", st["h2"])] + _bullets(m.get("limitations", []), st)
     out.append(_p("Status legend", st["h2"]))
@@ -343,7 +365,7 @@ def _method(review, st):
 
 def _appendix(review, st):
     dq = review.data_quality
-    out = _section("Appendix: data readiness", st)
+    out = _section(APPENDIX + "Data readiness", st)
     warnings = dq.get("warnings", [])
     out.append(_p(f"Data-quality warnings ({len(warnings)})", st["h2"]))
     groups: dict[tuple, list] = {}
@@ -372,11 +394,9 @@ def build_pdf(review, out_path: Path) -> Path:
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     story = [NextPageTemplate("page")] + _cover(review, st)
-    parts = [_story, _exec, _kpis, _footprint, _diy]
-    if growth_view(review):
-        parts.append(_growth)
-    parts += [_sites, _observations, _discussion, _method, _appendix]
-    for fn in parts:
+    for step in meeting_steps(review):
+        story += STEP_SECTIONS[step["n"]](review, st, step)
+    for fn in (_kpis, _footprint, _sites, _method, _appendix):
         story += fn(review, st)
     _Doc(out_path, review).build(story)
     return out_path

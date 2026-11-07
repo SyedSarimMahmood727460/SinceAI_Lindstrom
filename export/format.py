@@ -46,3 +46,62 @@ def fmt_range(metric) -> str:
     lo, hi = r.low / div, r.high / div
     suffix = "%" if u == "%" else (f" {u}" if u else "")
     return f"{lo:,.{dec}f} – {hi:,.{dec}f}{suffix}"
+
+
+# ---------------------------------------------------------------- compact style (meeting flow)
+# Mirrored by fmtCompact in the web UI; vectors in tests/test_format.py. Each tier rounds first
+# and then promotes the unit, so 999,999 EUR reads "€1.00M", not "€1,000k".
+MINUS = "−"  # U+2212
+NO_VALUE = "—"
+
+
+def _compact_abs(a: float, unit: str) -> str | None:
+    """Compact text for a non-negative value; None when the unit has no compact rule."""
+    if unit == "EUR":
+        if round(a) < 10_000:
+            return f"€{a:,.0f}"
+        if round(a / 1000) < 1000:
+            return f"€{a / 1000:,.0f}k"
+        return f"€{a / 1e6:,.2f}M"
+    if unit == "l":
+        return f"{a / 1000:,.0f} m³"
+    if unit == "kgCO2e":
+        if round(a) < 1000:
+            return f"{a:,.0f} kg CO₂e"
+        t = a / 1000
+        return f"{t:,.0f} t CO₂e" if round(t, 1) >= 10 else f"{t:,.1f} t CO₂e"
+    if unit == "h":
+        return f"{a:,.0f} h"
+    if unit == "kWh":
+        return f"{a / 1000:,.0f} MWh" if round(a) >= 1000 else f"{a:,.0f} kWh"
+    if unit == "ratio":
+        return f"{a * 100:,.1f}%"
+    return None
+
+
+def fmt_compact(value: float | None, unit: str) -> str:
+    """Compact meeting style: €1.96M, €758k, €8,250, 1,407 m³, 255 t CO₂e, 1,152 h, 172 MWh, 98.3%.
+    Negative values carry a true minus sign (−€297k); None is a dash."""
+    if value is None:
+        return NO_VALUE
+    text = _compact_abs(abs(value), unit)
+    if text is None:
+        return fmt_number(value, unit)
+    if value < 0 and any(ch in "123456789" for ch in text):  # never "−€0"
+        text = MINUS + text
+    return text
+
+
+def fmt_compact_value(metric) -> str:
+    """Compact text of the selected headline value of a MetricResult/Kpi."""
+    return fmt_compact(metric.value, metric.unit)
+
+
+def fmt_compact_range(metric) -> str:
+    """'range €1.36M – €2.74M', or '' when there is no range (or both ends read the same)."""
+    r = metric.range
+    if r is None or r.low is None or r.high is None or metric.value is None:
+        return ""
+    lo, hi = sorted((r.low, r.high))
+    a, b = fmt_compact(lo, metric.unit), fmt_compact(hi, metric.unit)
+    return "" if a == b else f"range {a} – {b}"
