@@ -40,12 +40,14 @@ def test_new_line_industry_country_without_code_changes(tmp_path, monkeypatch, p
            ["customer_id", "customer_name", "industry", "segment", "hq_country", "priority_topics",
             "data_status"],
            [["CUST901", "Riga Bistro Group", "Restaurants", "Mid", "Latvia",
-             "Hygiene|Cost optimization", "SYNTHETIC"]])
+             "Hygiene|Cost optimization", "SYNTHETIC"],
+            ["CUST902", "Riga Cafe Co", "Restaurants", "Mid", "Latvia", "", "SYNTHETIC"]])
     _write(pack / "sites.csv",
            ["site_id", "customer_id", "site_name", "country", "city", "site_type",
             "primary_laundry_id", "data_status"],
            [["S901", "CUST901", "Bistro Old Town", "Latvia", "Riga", "Restaurant", "L901", "SYNTHETIC"],
-            ["S902", "CUST901", "Bistro Harbour", "Latvia", "Riga", "Restaurant", "L901", "SYNTHETIC"]])
+            ["S902", "CUST901", "Bistro Harbour", "Latvia", "Riga", "Restaurant", "L901", "SYNTHETIC"],
+            ["S903", "CUST902", "Cafe Central", "Latvia", "Riga", "Cafe", "L901", "SYNTHETIC"]])
     _write(pack / "products.csv",
            ["product_id", "product_name", "product_group", "service_line", "avg_weight_kg",
             "synthetic_product_footprint_kgco2e", "synthetic_purchase_cost_eur", "material_note"],
@@ -58,24 +60,23 @@ def test_new_line_industry_country_without_code_changes(tmp_path, monkeypatch, p
         for site in ("S901", "S902"):
             rows.append(_activity("CUST901", site, "L901", "P9001", m, 400.0))
             rows.append(_activity("CUST901", site, "L901", "P1002", m, 300.0))
+        rows.append(_activity("CUST902", "S903", "L901", "P9001", m, 150.0))
         rows.append(_activity("CUST001", "S001", "L001", "P9001", m, 40.0))  # stays far below L001
     _write(pack / "service_activity.csv", act_header, rows)
-    cyc = []
-    for i, m in enumerate(MONTHS):
-        cyc.append([f"H901{i:03d}", 1, "CUST901", "S901", "L901", "P9001", f"{m}-10",
-                    f"{m}-10 13:00:00", f"{m}-11 13:00:00", f"{m}-12 13:00:00", 48, "ON_TIME",
-                    "SYNTHETIC"])
     _write(pack / "service_cycles.csv",
            ["asset_id", "cycle_number", "customer_id", "site_id", "laundry_id", "product_id",
             "pickup_timestamp", "in_laundry_timestamp", "out_laundry_timestamp",
             "delivered_timestamp", "cycle_hours", "performance_flag", "data_status"],
-           [[r[0], r[1], r[2], r[3], r[4], r[5], *r[6:]] for r in cyc])
+           [[f"H901{i:03d}", 1, "CUST901", "S901", "L901", "P9001", f"{m}-10",
+             f"{m}-10 13:00:00", f"{m}-11 13:00:00", f"{m}-12 13:00:00", 48, "ON_TIME",
+             "SYNTHETIC"] for i, m in enumerate(MONTHS)])
 
     cfg_dir = tmp_path / "config"
     shutil.copytree(ROOT / "config", cfg_dir, ignore=shutil.ignore_patterns("__pycache__"))
     rules_path = cfg_dir / "industry_rules.yaml"
     rules = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
     rules["defaults"]["Restaurants"] = ["service", "cost"]
+    rules["emphasis"]["Restaurants"] = "Highlight guest-facing hygiene for restaurants."
     rules_path.write_text(yaml.safe_dump(rules, allow_unicode=True), encoding="utf-8")
     monkeypatch.setenv("VR_CONFIG_DIR", str(cfg_dir))
 
@@ -92,6 +93,13 @@ def test_new_line_industry_country_without_code_changes(tmp_path, monkeypatch, p
     assert "Washroom" in r.meta.service_lines
     assert "Latvia" in r.meta.node.countries
     assert r.context.active_priorities[0] == "service"
+    cafe = review(account_id="CUST902")  # no topics: priorities come from the Restaurants rule
+    assert cafe.context.active_priorities == ["service", "cost"]
+    assert cafe.context.priority_source == "industry"
+    assert "restaurants" in cafe.context.industry_note
+    monkeypatch.delenv("VR_CONFIG_DIR")  # negative control: the real config has no such rule
+    assert review(account_id="CUST902").context.active_priorities != ["service", "cost"]
+    monkeypatch.setenv("VR_CONFIG_DIR", str(cfg_dir))
     assert review(account_id="CUST001").meta.service_lines == ["Washroom", "Workwear"]
     assert review(account_id="CUST001", service_line="Washroom").meta.service_line == "Washroom"
 
