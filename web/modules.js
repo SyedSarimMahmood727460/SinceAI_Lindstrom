@@ -5,8 +5,15 @@
 'use strict';
 
 const PRI = {water: 'Water', emissions: 'Emissions', cost: 'Cost', circularity: 'Circularity', service: 'Service'};
-const COLORS = {navy: '#1b2a4a', red: '#d71920', blue: '#1565c0', grey: '#8e9bb5', light: '#c9cfdb',
-  orange: '#e67e22', green: '#2e7d32', teal: '#00897b', slate: '#7f8c8d'};
+const COLORS = {};
+const PALETTE = {  // [light, dark]
+  navy: ['#4169d9', '#9bb5ff'], red: ['#4169d9', '#9bb5ff'], blue: ['#1565c0', '#7fb0ff'], grey: ['#8e9bb5', '#7b8799'],
+  light: ['#c9cfdb', '#3f4756'], orange: ['#e67e22', '#f0a35e'], green: ['#2e7d32', '#6fcf7a'], teal: ['#00897b', '#4fc6b8'], slate: ['#7f8c8d', '#9aa6a7']};
+function refreshColors() {
+  const d = document.documentElement.dataset.theme === 'dark';
+  Object.keys(PALETTE).forEach(k => { COLORS[k] = PALETTE[k][d ? 1 : 0]; });
+}
+refreshColors();
 
 // ---------- formatting helpers (display only) ----------
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
@@ -420,7 +427,7 @@ const Components = {
     const s = MEET[step](ctx);
     const nav = `<div class="mnav">${prev ? `<button type="button" class="btn ghost" data-step="${prev}">◀ Back</button>` : '<span></span>'}
       <span class="small mfoot">${esc(MEET_FOOT)}</span>
-      ${next ? `<button type="button" class="btn" data-step="${next}">Next: ${esc(name(next))} ▶</button>` : '<span></span>'}</div>`;
+      ${next ? `<button type="button" class="btn" data-step="${next}">Next: ${esc(name(next))}</button>` : '<span></span>'}</div>`;
     return {html: `<div class="meeting" data-step-now="${step}"><h1 class="sr">Customer meeting: ${esc(ctx.R.meta.node.name)}, ${esc(ctx.R.meta.period)}</h1>
       <div class="msteps" role="group" aria-label="Meeting steps">${bar}${isCustomer ? '<span class="mpill" title="Internal figures and edit controls are hidden">Customer view</span>' : ''}</div>
       <h2 class="mtitle ${s.long ? 'long' : ''}" tabindex="-1">${step} · ${esc(s.title)}</h2>${s.lead ? `<p class="lead mlead">${gloss(s.lead)}</p>` : ''}
@@ -465,7 +472,7 @@ const Components = {
     }
     const title = MOD_TITLES[ctx.mod.id] ? `<div class="mod-title">${esc(MOD_TITLES[ctx.mod.id])}</div>` : '';
     const cols = list.length === 5 ? 5 : Math.min(4, list.length || 1);
-    return {html: title + `<div class="kpis" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${list.map(k => kpiTile(k, ctx.R.meta.node.id, ctx.pri)).join('')}</div>`};
+    return {html: title + `<div class="kpis">${list.map(k => kpiTile(k, ctx.R.meta.node.id, ctx.pri)).join('')}</div>`};
   },
 
   observations(ctx) {
@@ -859,7 +866,7 @@ function obsHtml(o, i, idx) {
     <div class="meta">${badges(o, true)} <span>tags: ${esc(tagLabels(o.tags))}</span> <button type="button" class="link" data-evidence="${idx}">Show evidence &amp; formula</button></div></div>`;
 }
 
-window.VR = {Components, PRI, esc, num, fmtV, fmtM, fmtRange, fmtAbout, rangeText, badges, weight, obsHtml,
+window.VR = {refreshColors, Components, PRI, esc, num, fmtV, fmtM, fmtRange, fmtAbout, rangeText, badges, weight, obsHtml,
   setMode, isSimple, setGlossary, glossTerm, gloss, plainFinding, LOCAL, resetLocal, INPUT_CONTRACT,
   fmtCompact, fmtCompactRange, meetingSteps};
 })();

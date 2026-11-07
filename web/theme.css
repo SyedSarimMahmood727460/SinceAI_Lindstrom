@@ -1,0 +1,338 @@
+/* Theme ported from the Lindström Insight workspace (ui/SinceAI_Lindstrom_copy/src/theme.css).
+ * Light and dark tokens, blue accent, soft surfaces. Loaded after styles.css: it maps the legacy
+ * variables (--navy, --ink, --line ...) to the theme tokens and overrides the hard-coded whites. */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  --bg:#f6f7f9;--side:#fff;--surface:#fff;--surface-subtle:#f8fafc;--surface-hover:#edf1f6;
+  --text:#202938;--muted:#7b8799;--secondary:#5e6b7e;--border:#e5e9f0;
+  --blue:#4169d9;--blue-light:#edf2ff;--on-blue:#fff;--chart-grid:#edf0f5;--danger:#b45353;
+  --warn-text:#7a5200;--shadow:rgba(32,41,56,.12);
+  /* legacy names used by styles.css / modules.js / app.js */
+  --ink:var(--text);--mute:var(--muted);--line:var(--border);--card:var(--surface);
+  --navy:var(--blue);--red:var(--blue);--calc:var(--blue);
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#17191e;--side:#111317;--surface:#202329;--surface-subtle:#262a32;--surface-hover:#2e3440;
+  --text:#edf0f5;--muted:#9ba7b9;--secondary:#b8c3d3;--border:#333a45;
+  --blue:#9bb5ff;--blue-light:#293651;--on-blue:#17191e;--chart-grid:#363d48;--danger:#f3a7a7;
+  --warn-text:#f0cf8a;--shadow:rgba(0,0,0,.45);
+  --amber:#e8b45a;--amber-bg:#2e2616;--amber-line:#5a4a22;
+  --meas:#6fcf7a;--alloc:#c79be0;--est:#f0a35e;--syn:#9aa6a7;--pub:#4fc6b8;
+}
+
+/* ---- base ---- */
+body{background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+h1,h2,h3,.logo,.kpi .v,.fig-v,.mt-v,.mb-v,.mtile .mt-v,.story-statement,.mstep b,.say-h,.mfold summary,.obs .t,.mod-title+*,.mnext h3{color:var(--text)}
+.mgrid5 h3,.mnext h3,.mod-title,.mt-l{color:var(--muted)}
+select,input[type=text],input[type=number],textarea{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:7px}
+select option{background:var(--surface);color:var(--text)}
+input::placeholder{color:var(--muted)}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+a,.link,button.link{color:var(--blue)}
+.src.kam,.pill.entered{color:var(--blue);border-color:var(--blue)}
+
+/* ---- surfaces ---- */
+header,.top header,.askpanel,.popover,.drawer,.export .menu,.card,.prompt,.chip,.seg button,.mstep,.mtile,.mfold,.obs,.btn.ghost,.export .menu button,.pill,.story-card,nav,.toolbar select{background:var(--surface);color:var(--text)}
+header,.top header,nav,.askpanel,.popover,.drawer,.export .menu{border-color:var(--border)}
+header,.top header,nav{background:var(--side)}
+.card,.prompt,.chip,.mstep,.mtile,.mfold,.obs,.btn.ghost,.pill{border-color:var(--border)}
+.say,.formula,.note,.interp-box{background:var(--surface-subtle);border-color:var(--border);color:var(--text)}
+.say{border-left-color:var(--blue)}.say-h{color:var(--blue)}
+.kchip,.mpill{background:var(--blue-light);border-color:transparent;color:var(--blue)}
+.bar,.mb-t{background:var(--surface-hover)}
+.bar i,.mb-t i.diy{background:var(--blue)}.mb-t i.lin{background:var(--secondary)}
+tr.click:hover,.fig:hover,.export .menu button:hover,.export .menu button:focus{background:var(--surface-hover)}
+tr.sel{background:var(--blue-light)}
+th,td{border-bottom-color:var(--border)}
+.dcol h2{border-bottom-color:var(--blue)}
+.mtile.money{border-top-color:var(--blue)}
+.mstep.on{border-color:var(--blue);box-shadow:inset 0 3px 0 var(--blue)}
+.kpi.focus{border-color:var(--blue);box-shadow:none}
+.kpi:hover,.mtile[role=button]:hover{box-shadow:0 2px 10px var(--shadow)}
+.story-n{background:var(--blue);color:var(--on-blue)}
+.obs{border-left:4px solid var(--blue)}.obs .a b{color:var(--blue)}
+.obs.warn{border-left-color:var(--amber);background:var(--amber-bg)}.obs.warn .t,.obs.warn .a b{color:var(--amber)}
+.banner,.strip,.mhint,.hint,.alert{color:var(--warn-text)}
+.alert .t{color:var(--warn-text)}
+.flag,.err,.toast.err{color:var(--danger)}.toast.err{background:var(--danger);color:var(--on-blue)}
+.toast,.gtip{background:var(--text);color:var(--surface)}
+.chip.on,.seg button.on{background:var(--blue);border-color:var(--blue);color:var(--on-blue)}
+button.chip{color:var(--text)}button.chip.on{color:var(--on-blue)}button.chip.sugg{color:var(--muted)}
+.btn{background:var(--blue);color:var(--on-blue);border-radius:8px}
+.btn.ghost{background:var(--surface);color:var(--text)}
+.hbtn[aria-expanded="true"]{background:var(--blue-light);border-color:var(--blue)}
+.hbtn .dot{background:var(--blue)}
+.drawer{box-shadow:-6px 0 24px var(--shadow)}
+.popover,.askpanel,.export .menu{box-shadow:0 8px 24px var(--shadow)}
+.mtitle,.mlead{color:var(--text)}.mrel,.lead{color:var(--muted)}
+.logo{color:var(--text)}.logo i{background:var(--blue)}
+
+/* ---- sidebar navigation (copy's .nav look) ---- */
+.wrap{grid-template-columns:var(--nav-w,230px) 1fr;transition:grid-template-columns .2s}
+nav{display:flex;flex-direction:column;gap:2px;padding:14px 12px;overflow-y:auto}
+nav a{display:flex;align-items:center;gap:11px;min-height:40px;padding:9px 12px;border:0;border-left:0;border-radius:8px;
+  color:var(--secondary);font-size:13px;font-weight:550;background:transparent}
+nav a:hover{background:var(--surface-hover)}
+nav a.on{background:var(--blue-light);color:var(--blue);font-weight:600}
+nav a .ni{width:20px;text-align:center;flex-shrink:0;font-size:15px;line-height:1}
+nav .sub{padding:16px 12px 4px;color:var(--muted)}
+.nav-foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:2px}
+.theme-toggle,.nav-collapse{display:flex;align-items:center;gap:10px;width:100%;min-height:40px;padding:9px 12px;border:0;border-radius:8px;
+  background:transparent;color:var(--secondary);text-align:left;cursor:pointer;font-size:12px;font-weight:550}
+.theme-toggle:hover,.nav-collapse:hover{background:var(--surface-hover)}
+.theme-toggle .ni,.nav-collapse .ni{width:20px;text-align:center;font-size:15px}
+.theme-switch-track{margin-left:auto;width:32px;height:19px;padding:3px;border-radius:20px;background:#a7b2c4;flex-shrink:0}
+.theme-switch-track>span{display:block;height:13px;width:13px;border-radius:50%;background:#fff;transition:transform .15s}
+.theme-toggle[aria-checked="true"] .theme-switch-track{background:#4169d9}
+.theme-toggle[aria-checked="true"] .theme-switch-track>span{transform:translateX(13px)}
+body.nav-collapsed{--nav-w:64px}
+body.nav-collapsed nav a{justify-content:center;padding:9px 0}
+body.nav-collapsed nav a .nt,body.nav-collapsed nav .sub,body.nav-collapsed .theme-label,body.nav-collapsed .theme-switch-track,body.nav-collapsed .collapse-label{display:none}
+body.nav-collapsed .theme-toggle,body.nav-collapsed .nav-collapse{justify-content:center;padding:9px 0}
+/* ---- helpful extras ---- */
+main{padding:24px 28px 48px}
+.mods>.mod,.card{border-radius:12px}
+.kbd{display:inline-block;border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:0 6px;font:11px/18px Consolas,monospace;color:var(--secondary);background:var(--surface-subtle)}
+.helpbar{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);margin:0 0 12px}
+.helpbar .legend-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:middle}
+@media print{:root{color-scheme:light}body{background:#fff;color:#202938}}
+
+/* ---- customisable dashboard (edit mode) ---- */
+.mods>.mod[style*="--span"]{grid-column:span var(--span)}
+@media (max-width:1100px){.mods>.mod[style*="--span"]{grid-column:span 12}}
+.lay-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:10px}
+.lay-add{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.lay-add select{min-height:32px;padding:4px 8px}
+.btn.sm[disabled]{opacity:.5;cursor:default}
+.mods.editing>.mod{position:relative;outline:2px dashed var(--border);outline-offset:3px;border-radius:12px;padding-top:34px;background:transparent}
+.mods.editing>.mod.lay-over{outline-color:var(--blue);background:var(--blue-light)}
+.mods.editing>.mod.lay-drag{opacity:.45}
+.lay-bar{position:absolute;top:0;left:0;right:0;height:30px;display:flex;align-items:center;gap:4px;padding:0 6px;background:var(--surface-subtle);border:1px solid var(--border);border-radius:10px 10px 0 0;cursor:grab;font-size:12px;z-index:2}
+.lay-grip{color:var(--muted);font-size:15px;padding:0 4px}
+.lay-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--secondary);font-weight:600}
+.lay-bar button{border:1px solid transparent;background:transparent;color:var(--secondary);border-radius:6px;min-width:26px;height:24px;padding:0 6px;cursor:pointer;font-size:12px}
+.lay-bar button:hover{background:var(--surface-hover);border-color:var(--border)}
+.lay-bar button.on{background:var(--blue);color:var(--on-blue)}
+.lay-widths{display:inline-flex;gap:2px;margin:0 4px}
+.lay-x:hover{color:var(--danger)!important}
+.mods.editing .kpi,.mods.editing .mtile{pointer-events:none}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.mods>.mod[style*="--span"] .kpi .v{font-size:20px;overflow-wrap:anywhere}
+
+/* =====================================================================
+ * Clean pass: flat surfaces, one accent, 8px grid, sentence-case labels,
+ * Material breakpoints (<840 drawer, 840-1199 rail, 1200+ sidebar).
+ * ===================================================================== */
+:root{--r:8px;--r-sm:6px;--fs:14px}
+body{font-family:Roboto,"Segoe UI",system-ui,-apple-system,sans-serif;font-size:var(--fs);line-height:1.5;font-variant-numeric:tabular-nums}
+h1{font-size:22px;font-weight:500;letter-spacing:0;margin:0 0 4px}
+h2{font-size:16px;font-weight:500}
+.lead{font-size:14px;color:var(--muted);margin:0 0 16px}
+.ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.ic.caret{width:16px;height:16px;margin-left:2px}
+
+/* controls */
+.btn{min-height:36px;padding:0 16px;border-radius:var(--r-sm);font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn.sm{min-height:30px;padding:0 12px}
+.btn.ghost{border:1px solid var(--border)}
+.btn.ghost:hover{background:var(--surface-hover)}
+.hbtn{padding:0 12px;gap:8px}
+select,input[type=text],input[type=number]{border-radius:var(--r-sm);min-height:36px;padding:0 10px}
+.ctl{font-size:12px;color:var(--muted);gap:4px}
+.seg{border-radius:var(--r-sm)}
+.seg button{padding:0 14px;min-height:34px}
+.chip{border-radius:16px;padding:4px 12px;font-size:13px}
+.pill,.badge,.kchip,.mpill{border-radius:4px;font-weight:500}
+.badge{padding:1px 6px;font-size:11px;letter-spacing:0}
+
+/* header */
+header,.top header{min-height:56px;height:auto;padding:8px 16px;gap:12px}
+.logo{font-size:17px;font-weight:500;gap:10px}
+.logo i{width:20px;height:20px;border-radius:5px}
+.logo small{font-size:12px;color:var(--muted);font-weight:400}
+.menu-btn{display:none;padding:0;width:40px;justify-content:center}
+.strip{height:auto;min-height:24px;line-height:24px;padding:0 16px;font-size:12px}
+
+/* surfaces: one border, no shadow, 8px radius */
+.card,.prompt,.mtile,.mfold,.obs,.story-card,.mstep,.lay-toolbar,.note,.alert,.hint,.mhint,.banner{border-radius:var(--r);box-shadow:none}
+.card{padding:16px}
+.mods,.grid,.kpis,.mtiles,.levers,.helps{gap:16px}
+.kpi:hover,.mtile[role=button]:hover{box-shadow:none;border-color:var(--blue)}
+.kpi .v{font-size:24px;font-weight:500}
+.kpi .l{font-size:13px}
+.obs{border-left-width:3px}
+.obs .t{font-weight:500}
+.say{border-radius:var(--r);border-left-width:3px}
+
+/* labels: sentence case instead of uppercase micro-headings */
+.mod-title,.mt-l,.say-h,.mnext h3,.mgrid5 h3,nav .sub,.story-card h2{text-transform:none;letter-spacing:0}
+.mod-title{font-size:13px;font-weight:500;margin:0 0 8px}
+.mt-l{font-size:13px}
+.say-h{font-size:12px;font-weight:500}
+nav .sub{font-size:12px;font-weight:500;padding:16px 12px 4px}
+.story-card h2{font-size:15px;font-weight:500}
+.story-statement{font-weight:500}
+
+/* meeting: steps as tabs, calmer numbers */
+.msteps{gap:0;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+.msteps::-webkit-scrollbar{display:none}
+.mstep{flex:1 0 auto;min-width:150px;background:transparent;border:0;border-bottom:2px solid transparent;border-radius:0;padding:10px 16px;box-shadow:none}
+.mstep:hover{background:var(--surface-hover)}
+.mstep.on{border-bottom-color:var(--blue);box-shadow:none;background:transparent}
+.mstep b{font-weight:500;font-size:14px;color:var(--secondary)}
+.mstep.on b{color:var(--blue)}
+.mtitle{font-size:clamp(20px,2.4vw,24px);font-weight:500}
+.mtitle.long{font-size:18px;font-weight:500}
+.mt-v{font-size:clamp(26px,3vw,34px);font-weight:500;white-space:normal;overflow-wrap:anywhere}
+.mtile{padding:16px 20px}
+.mtile.money{border-top:1px solid var(--border)}
+.mb-t{height:20px;border-radius:4px}.mb-t i{border-radius:4px}
+.mb-v{font-weight:500}
+.mpill{font-size:12px}
+
+/* navigation */
+nav a{border-radius:var(--r-sm);font-weight:500}
+nav a.on{font-weight:500}
+nav a .ni,.theme-toggle .ni,.nav-collapse .ni{display:inline-flex;width:20px;height:20px}
+.theme-toggle,.nav-collapse{border-radius:var(--r-sm)}
+
+/* tables: dense, 13px body / 12px medium header */
+table{font-size:13px}
+th{font-size:12px;font-weight:500;color:var(--muted)}
+th,td{padding:8px 10px}
+.card:has(>table),.card:has(table){overflow-x:auto}
+
+/* edit mode: quieter */
+.lay-toolbar{padding:8px 12px;gap:12px}
+.mods.editing>.mod{outline:1px solid var(--border);outline-offset:4px;border-radius:var(--r)}
+.lay-bar{border-radius:var(--r) var(--r) 0 0}
+
+/* ---- 840-1199: navigation rail ---- */
+@media (min-width:840px) and (max-width:1199px){
+  .wrap{--nav-w:72px}
+  nav a{justify-content:center;padding:9px 0}
+  nav a .nt,nav .sub,.theme-label,.theme-switch-track,.collapse-label,.nav-collapse{display:none}
+  .theme-toggle{justify-content:center;padding:9px 0}
+  nav{padding:12px 8px}
+}
+/* ---- below 840: modal drawer, one column ---- */
+@media (max-width:839px){
+  .wrap{grid-template-columns:1fr;min-height:0}
+  .menu-btn{display:inline-flex}
+  nav{position:fixed;top:0;left:0;bottom:0;height:100vh;width:280px;max-width:86vw;z-index:60;transform:translateX(-100%);
+    transition:transform .2s;border-right:1px solid var(--border);box-shadow:none}
+  body.nav-open nav{transform:none;box-shadow:0 8px 24px var(--shadow)}
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:55}
+  .scrim[hidden]{display:none}
+  .nav-collapse{display:none}
+  body.nav-collapsed nav a{justify-content:flex-start;padding:9px 12px}
+  body.nav-collapsed nav a .nt,body.nav-collapsed nav .sub,body.nav-collapsed .theme-label,body.nav-collapsed .theme-switch-track{display:revert}
+  main{padding:16px 16px 40px}
+  .popover{position:fixed;left:16px;right:16px;top:auto;width:auto}
+  .askpanel{padding:12px 16px 6px}
+  .mtiles,.mtiles.n2,.mgrid5,.dgrid{grid-template-columns:1fr}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mbar{grid-template-columns:90px 1fr 64px}
+  .mnav{flex-wrap:wrap}
+  .lay-toolbar .small{display:none}
+  .drawer{width:100vw}
+  .mods>.mod[style*="--span"]{grid-column:span 12}
+}
+@media (max-width:480px){
+  h1{font-size:20px}
+  .mstep{min-width:128px;padding:10px 12px}
+}
+
+.kpi.focus{box-shadow:none!important}
+.kpi .v{overflow-wrap:anywhere}
+@media (max-width:480px){.kpis{grid-template-columns:1fr}}
+
+/* ---- resizable sidebar handle (from the Insight workspace) ---- */
+.nav-resize{position:absolute;top:0;right:0;bottom:0;width:8px;cursor:col-resize;touch-action:none;z-index:25;outline-offset:-2px}
+.nav-resize::after{content:"";position:absolute;inset:0 3px 0 4px;background:transparent}
+.nav-resize:hover::after,.nav-resize:focus-visible::after,body.nav-resizing .nav-resize::after{background:var(--blue)}
+body.nav-resizing,body.nav-resizing *{cursor:col-resize!important;user-select:none!important}
+body.nav-resizing .wrap,body.nav-resizing nav{transition:none}
+body.nav-collapsed .nav-resize{display:none}
+@media (max-width:1199px){.nav-resize{display:none}}
+
+/* =====================================================================
+ * Page layout like the Insight workspace: customer in the sidebar, a slim action bar
+ * (tag left, Ask / Settings / Export right) and a filter row under it.
+ * ===================================================================== */
+nav{top:0;height:100vh;align-self:start}
+.content{min-width:0;display:flex;flex-direction:column}
+.top{position:sticky;top:0;z-index:20;background:var(--bg)}
+.actionbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 28px 8px}
+.ab-left{display:flex;align-items:center;gap:12px;min-width:0}
+.proto-tag{display:inline-block;max-width:100%;padding:3px 10px;border:1px solid var(--amber-line);border-radius:4px;background:var(--amber-bg);color:var(--warn-text);font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.actionbar .toolbar{display:flex;align-items:center;gap:8px;margin:0;flex:0 0 auto}
+.filters{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:end;padding:4px 28px 12px;border-bottom:1px solid var(--border)}
+.filters .ctl select{min-width:200px;max-width:320px}
+.nav-brand{display:flex;align-items:center;gap:10px;padding:4px 12px 14px;font-size:17px;font-weight:500;color:var(--text);white-space:nowrap}
+.nav-brand small{font-size:12px;color:var(--muted);font-weight:400}
+.nav-cust{padding:0 8px 10px}
+.nav-cust .ctl select{width:100%;min-width:0}
+.askpanel{left:0;right:0;padding:12px 28px 6px}
+.menu-btn{display:none}
+/* narrow sidebar (rail or collapsed): the customer picker moves to the filter row (see app.js) */
+body.nav-collapsed .nav-brand .nt{display:none}
+body.nav-collapsed .nav-brand{justify-content:center;padding:4px 0 14px}
+@media (min-width:840px) and (max-width:1199px){.nav-brand .nt{display:none}.nav-brand{justify-content:center;padding:4px 0 14px}}
+@media (max-width:839px){
+  .actionbar{padding:12px 16px 8px;flex-wrap:wrap}
+  .menu-btn{display:inline-flex;width:40px;padding:0;justify-content:center}
+  .actionbar{row-gap:8px}
+  .menu-btn{order:1}.actionbar .toolbar{order:2;margin-left:auto}
+  .ab-left{order:3;flex:1 1 100%}
+  .proto-tag{font-size:11px;white-space:normal;overflow:visible}
+  .actionbar .hbtn .hl{display:none}
+  .actionbar .hbtn{width:40px;padding:0;justify-content:center}
+  .filters{padding:4px 16px 12px;gap:8px}
+  .filters .ctl{flex:1 1 calc(50% - 8px);min-width:0}
+  .filters .ctl select{min-width:0;width:100%;max-width:none}
+  .filters #custCtl{flex-basis:100%}
+  body.nav-collapsed .nav-brand .nt{display:revert}
+  body.nav-collapsed .nav-brand{justify-content:flex-start;padding:4px 12px 14px}
+}
+
+.msteps{flex-wrap:nowrap}
+
+/* ---- collapse toggle in the brand row (like the Insight workspace) ---- */
+.nav-brand .nav-collapse{margin-left:auto;width:32px;min-height:32px;padding:0;justify-content:center;flex-shrink:0}
+.nav-collapse .chev{transform-origin:15px 12px}
+body.nav-collapsed .nav-collapse .chev{transform:scaleX(-1)}
+body.nav-collapsed{--nav-w:72px}
+body.nav-collapsed .nav-brand{flex-direction:column;gap:10px;padding:4px 0 12px}
+body.nav-collapsed .nav-brand .nav-collapse{margin-left:0}
+body.nav-collapsed .nav-cust{display:none}
+@media (min-width:840px) and (max-width:1199px){.nav-brand{flex-direction:column;gap:10px}.nav-brand .nav-collapse{display:none}}
+@media (max-width:839px){.nav-brand .nav-collapse{display:none}}
+
+/* ---- brand: the "L" mark and wordmark from the Insight workspace ---- */
+.nav-brand{gap:9px;padding:4px 7px 14px;font-weight:750;font-size:15px;letter-spacing:-.3px}
+.brandmark{display:grid;place-items:center;width:31px;height:31px;border-radius:9px;background:var(--text);color:var(--surface);font-size:20px;font-weight:800;letter-spacing:0;flex-shrink:0}
+.brand-text{min-width:0;line-height:1.15}
+.brand-text small{display:block;margin-top:4px;font-size:8px;letter-spacing:.8px;font-weight:500;color:var(--muted)}
+
+/* disclaimer tag inside the sidebar, above Dark mode */
+.nav-foot .proto-tag{display:block;margin:0 4px 10px;white-space:normal;overflow:visible;text-align:center;line-height:1.35;padding:6px 10px}
+
+/* collapsed sidebar on desktop: no synthetic-data tag anywhere */
+@media (min-width:1200px){body.nav-collapsed #disclaimerStrip{display:none}}
+
+/* brand icon: the project's original red circle, sized like the Insight workspace mark */
+.brandmark{background:#d71920;border-radius:50%;font-size:0}
+
+/* brand is text only */
+.nav-brand{padding-left:12px}
+
+/* wide screens: the tag lives in the sidebar, so filters and actions share one row (no empty bar) */
+@media (min-width:1200px){
+  .top{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:12px;padding:16px 28px 12px;border-bottom:1px solid var(--border)}
+  .filters{grid-column:1;grid-row:1;padding:0;border-bottom:0}
+  .actionbar{grid-column:2;grid-row:1;padding:0}
+  .ab-left{display:none}
+  .askpanel{padding-left:28px;padding-right:28px}
+}

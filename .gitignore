@@ -8,3 +8,5 @@ __pycache__/
 .pytest_cache/
 data/kam_inputs/
 data/intel_cache/
+
+run_local/

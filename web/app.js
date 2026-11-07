@@ -245,10 +245,10 @@ function renderPage() {
   const mods = MODULES.filter(m => m.page === S.view)
     .map((m, i) => ({m, i, w: weight(m.priority_tags, pri)}))
     .sort((a, b) => pin(b.m) - pin(a.m) || b.w - a.w || a.i - b.i).map(x => x.m);
-  const out = [], pending = [];
+  const entries = [];
   for (const mod of mods) {
     if (empty && !STATIC_COMPONENTS.has(mod.component)) {
-      out.push(`<div class="mod" data-mod="${esc(mod.id)}"><div class="card empty">No data for this filter</div></div>`);
+      entries.push({id: mod.id, cls: '', html: '<div class="card empty">No data for this filter</div>', charts: []});
       continue;
     }
     if (!moduleStatus(mod).show) continue;
@@ -258,9 +258,15 @@ function renderPage() {
       res = {html: `<div class="card empty">Could not render ${esc(mod.id)}</div>`};
     }
     if (!res) continue;
-    out.push(`<div class="mod ${res.cls || ''}" data-mod="${esc(mod.id)}">${res.html}</div>`);
-    (res.charts || []).forEach(c => pending.push(c));
+    entries.push({id: mod.id, cls: res.cls || '', html: res.html, charts: res.charts || []});
   }
+  const LY = window.VRLayout && window.VRLayout.supports(S.view) ? window.VRLayout : null;
+  const arranged = LY ? LY.arrange(S.view, S.account, entries) : null;
+  const shown = arranged ? arranged.shown : entries;
+  const pending = shown.flatMap(e => e.charts);
+  const out = shown.map(e => `<div class="mod ${e.cls}" data-mod="${esc(e.id)}"${LY ? LY.attrs(e.id) : ''}>${LY ? LY.chrome(e.id) : ''}${e.html}</div>`);
+  if (LY) $('pageHead').insertAdjacentHTML('beforeend', LY.toolbar());
+  $('page').classList.toggle('editing', !!(LY && LY.isEditing()));
   $('page').innerHTML = out.join('') || '<div class="mod"><div class="card empty">No modules for this page.</div></div>';
   if (window.Chart) pending.forEach(c => mkChart(c));
   else if (pending.length) toast('Charts unavailable (Chart.js did not load)', true);
@@ -591,7 +597,7 @@ function explainLocal(id) {
   const rng = m.range ? `<h3>Sensitivity (low / base / high)</h3><table><tr><th class="l">Case</th><th>Value</th></tr>${['low', 'base', 'high'].map(c =>
     `<tr class="${c === S.sens ? 'sel' : ''}"><td class="l">${c}${c === S.sens ? ' (selected)' : ''}</td><td>${esc(VR.fmtV(m.unit, m.range[c]))}</td></tr>`).join('')}</table>` : '';
   const kamIn = R.dto && (R.dto.inputs || []).some(i => i.source === 'kam') && /^dto_/.test(m.metric_id)
-    ? '<p class="small">✎ Uses figures entered by the account manager where given (see Your numbers).</p>' : '';
+    ? '<p class="small">Uses figures entered by the account manager where given (see Your numbers).</p>' : '';
   const lin = m.lineage || {};
   const how = isSimple() ? '<p class="small">Switch to <button type="button" class="link" data-mode-set="expert">Expert detail</button> for the formula and data lineage.</p>'
     : `<h3>How it's calculated</h3><div class="formula">${esc(m.formula_text)}</div>
@@ -603,6 +609,9 @@ function explainLocal(id) {
 
 function mkChart({id, type, data, options}) {
   const el = $(id); if (!el) return;
+  const cs = getComputedStyle(document.documentElement);
+  Chart.defaults.color = cs.getPropertyValue('--secondary').trim() || '#5e6b7e';
+  Chart.defaults.borderColor = cs.getPropertyValue('--chart-grid').trim() || '#edf0f5';
   charts[id] = new Chart(el, {type, data, options: Object.assign({responsive: true, maintainAspectRatio: false,
     plugins: {legend: {position: 'bottom', labels: {boxWidth: 10, font: {size: 11}}}}, elements: {line: {tension: .3}}}, options || {})});
 }
@@ -863,6 +872,83 @@ document.addEventListener('click', e => {
   else if (d.closeSite) { S.site = null; siteReview = null; renderPage(); }
 });
 document.querySelectorAll('nav a[data-v]').forEach(a => { a.onclick = e => { e.preventDefault(); go(a.dataset.v); }; });
+// ---------- theme (light / dark) and sidebar collapse ----------
+const ICON_SUN = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></svg>';
+const ICON_MOON = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 019.5 4 8 8 0 1020 14.5z"/></svg>';
+function applyTheme(t, persist) {
+  document.documentElement.dataset.theme = t;
+  const b = $('themeBtn'); if (b) { b.setAttribute('aria-checked', String(t === 'dark')); $('themeIcon').innerHTML = t === 'dark' ? ICON_MOON : ICON_SUN; }
+  if (persist) { try { localStorage.setItem('lindstrom-theme', t); } catch (e) { /* session only */ } }
+  if (window.VR && VR.refreshColors) VR.refreshColors();
+  if (R) renderPage();
+}
+$('themeBtn').onclick = () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark', true);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ev => {
+  let saved = null; try { saved = localStorage.getItem('lindstrom-theme'); } catch (e) { /* none */ }
+  if (!saved) applyTheme(ev.matches ? 'dark' : 'light', false);
+});
+// below 840px the navigation is a modal drawer opened from the header (Material breakpoints)
+const navDrawer = open => {
+  document.body.classList.toggle('nav-open', open);
+  $('menuBtn').setAttribute('aria-expanded', String(open)); $('scrim').hidden = !open;
+};
+$('menuBtn').onclick = () => navDrawer(!document.body.classList.contains('nav-open'));
+$('scrim').onclick = () => navDrawer(false);
+document.querySelectorAll('nav a[data-v]').forEach(l => l.addEventListener('click', () => navDrawer(false)));
+// ---------- resizable sidebar: drag the edge, arrows nudge, double-click resets ----------
+{
+  const MIN = 220, MAX = 360, DEF = 230, h = $('navResize');
+  const clamp = w => Math.min(MAX, Math.max(MIN, w));
+  const apply = (w, save) => {
+    width = w; document.documentElement.style.setProperty('--nav-w', w + 'px'); h.setAttribute('aria-valuenow', String(w));
+    if (save) { try { localStorage.setItem('vr-nav-width', String(w)); } catch (e) { /* session only */ } }
+  };
+  let width = DEF, drag = null;
+  try { const w = +localStorage.getItem('vr-nav-width'); if (w >= MIN && w <= MAX) width = w; } catch (e) { /* default */ }
+  const cur = () => width;
+  h.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    e.preventDefault(); drag = {x: e.clientX, w: cur()}; h.setPointerCapture(e.pointerId);
+    document.body.classList.add('nav-resizing');
+  });
+  h.addEventListener('pointermove', e => { if (drag) apply(clamp(drag.w + e.clientX - drag.x), false); });
+  const end = e => {
+    if (!drag) return;
+    drag = null; document.body.classList.remove('nav-resizing');
+    if (h.hasPointerCapture(e.pointerId)) h.releasePointerCapture(e.pointerId);
+    apply(clamp(cur()), true);
+  };
+  h.addEventListener('pointerup', end); h.addEventListener('pointercancel', end);
+  h.addEventListener('dblclick', () => { apply(DEF, false); try { localStorage.removeItem('vr-nav-width'); } catch (e) { /* none */ } });
+  h.addEventListener('keydown', e => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    e.preventDefault();
+    apply(e.key === 'Home' ? MIN : e.key === 'End' ? MAX : clamp(cur() + (e.key === 'ArrowRight' ? 10 : -10)), true);
+  });
+  h.setAttribute('aria-valuenow', String(width));
+}
+// ---------- customer picker: sidebar when it is wide, filter row when it is a rail / collapsed ----------
+function placeCustomer() {
+  const rail = innerWidth >= 840 && (innerWidth < 1200 || document.body.classList.contains('nav-collapsed'));
+  const slot = $(rail ? 'filterRow' : 'custSlot'), c = $('custCtl');
+  if (c.parentNode !== slot) { if (rail) slot.prepend(c); else slot.appendChild(c); }
+  // the "synthetic data" tag sits above Dark mode when the sidebar is fully open; otherwise (rail, collapsed,
+  // phone drawer) it stays in the action bar so it is always visible
+  const full = innerWidth >= 1200 && !document.body.classList.contains('nav-collapsed');
+  const tag = $('disclaimerStrip'), dest = full ? document.querySelector('.nav-foot') : document.querySelector('.ab-left');
+  if (tag.parentNode !== dest) dest.prepend(tag);
+}
+addEventListener('resize', placeCustomer);
+$('navCollapse').onclick = () => {
+  const c = document.body.classList.toggle('nav-collapsed');
+  $('navCollapse').setAttribute('aria-label', c ? 'Expand sidebar' : 'Collapse sidebar'); $('navCollapse').title = c ? 'Expand sidebar' : 'Collapse sidebar';
+  try { localStorage.setItem('vr-nav', c ? 'collapsed' : 'open'); } catch (e) { /* session only */ }
+  placeCustomer();
+};
+if (document.body.classList.contains('nav-collapsed')) { $('navCollapse').setAttribute('aria-label', 'Expand sidebar'); $('navCollapse').title = 'Expand sidebar'; }
+placeCustomer();
+applyTheme(document.documentElement.dataset.theme || 'light', false);
+if (window.VRLayout) window.VRLayout.init({rerender: () => renderPage(), tagsOf: id => ((MODULES.find(m => m.id === id) || {}).priority_tags || [])});
 $('drawerX').onclick = closeDrawer;
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {

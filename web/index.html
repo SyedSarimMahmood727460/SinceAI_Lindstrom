@@ -2,30 +2,50 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2714%27 fill=%27%23d71920%27/%3E%3C/svg%3E">
 <title>Value Review – Customer Value &amp; Sustainability (prototype)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{var t=localStorage.getItem("lindstrom-theme");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;var w=+localStorage.getItem("vr-nav-width");if(w>=220&&w<=360)document.documentElement.style.setProperty("--nav-w",w+"px");if(localStorage.getItem("vr-nav")==="collapsed")document.documentElement.classList.add("nav-pre")}catch(e){}</script>
 <link rel="stylesheet" href="/web/styles.css">
+<link rel="stylesheet" href="/web/theme.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
+<script>if(document.documentElement.classList.contains("nav-pre"))document.body.classList.add("nav-collapsed")</script>
+<div class="wrap">
+<nav id="nav">
+  <div class="nav-brand"><div class="brand-text nt">Lindström</div><button type="button" class="nav-collapse" id="navCollapse" aria-label="Collapse sidebar" title="Collapse sidebar"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path class="chev" d="M16 10l-2 2 2 2"/></svg></button></div>
+  <div class="nav-cust" id="custSlot"><label class="ctl" id="custCtl">Customer<select id="cust"></select></label></div>
+  <a data-v="meeting" href="#" class="on"><span class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg></span><span class="nt">Meeting</span></a>
+  <div class="sub kam-only">Before the meeting</div>
+  <a data-v="intel" href="#" class="kam-only"><span class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></span><span class="nt">Account intelligence</span></a>
+  <div class="sub">Detail</div>
+  <a data-v="overview" href="#"><span class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/></svg></span><span class="nt">Overview</span></a>
+  <a data-v="sites" href="#"><span class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 10-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span><span class="nt">Sites &amp; drill-down</span></a>
+  <a data-v="vs_diy" href="#"><span class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M6 20h12M5 7h14M5 7l-3 7h6zM19 7l-3 7h6z"/></svg></span><span class="nt">Service vs do-it-yourself</span></a>
+  <a data-v="growth" href="#"><span class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg></span><span class="nt">Growth opportunities</span></a>
+  <a data-v="footprint" href="#"><span class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19C5 10 10 5 19 5c0 9-5 14-14 14zM5 19l8-8"/></svg></span><span class="nt">Footprint &amp; handprint</span></a>
+  <a data-v="circularity" href="#"><span class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 11-2.3-5.7M20 4v5h-5"/></svg></span><span class="nt">Circularity &amp; repairs</span></a>
+  <a data-v="steering" href="#"><span class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V4M6 5h12l-2 4 2 4H6"/></svg></span><span class="nt">Steering committee</span></a>
+  <div class="sub">Trust</div>
+  <a data-v="fit" href="#"><span class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5zM3 13l9 5 9-5"/></svg></span><span class="nt">Built on Lindström's work</span></a>
+  <a data-v="methodology" href="#"><span class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 13h6M9 17h6"/></svg></span><span class="nt">Methodology &amp; assumptions</span></a>
+  <a data-v="readiness" href="#"><span class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg></span><span class="nt">Data readiness</span></a>
+  <div class="nav-foot">
+    <button type="button" class="theme-toggle" id="themeBtn" role="switch" aria-checked="false" aria-label="Dark mode" title="Switch light / dark theme"><span class="ni" id="themeIcon"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></svg></span><span class="theme-label">Dark mode</span><span class="theme-switch-track" aria-hidden="true"><span></span></span></button>
+  </div>
+  <div class="nav-resize" id="navResize" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize sidebar" aria-controls="nav" aria-valuemin="220" aria-valuemax="360" title="Drag to resize · Double-click to reset"></div>
+</nav>
+<div class="scrim" id="scrim" hidden></div>
+<div class="content">
 <div class="top">
-<header>
-  <div class="logo"><i></i>Lindström <small>Value Review</small></div>
+<div class="actionbar">
+  <button type="button" class="btn ghost hbtn menu-btn" id="menuBtn" aria-label="Open navigation" aria-controls="nav" aria-expanded="false"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+  <div class="ab-left"><span class="proto-tag" id="disclaimerStrip" title="All figures are synthetic or estimated and have not been audited">Prototype · synthetic data · not audited</span><span class="loading" id="loading">Loading…</span></div>
   <div class="toolbar">
-    <label class="ctl">Customer<select id="cust"></select></label>
-    <label class="ctl">Period<select id="period">
-      <option value="2025">2025 (Jan–Dec)</option>
-      <option value="2025-Q1">2025 Q1</option>
-      <option value="2025-Q2">2025 Q2</option>
-      <option value="2025-Q3">2025 Q3</option>
-      <option value="2025-Q4">2025 Q4</option>
-    </select></label>
-    <label class="ctl"><span>Compare with <span class="gl" data-term="baseline" tabindex="0">(baseline)</span></span><select id="base"></select></label>
-    <span class="loading" id="loading">Loading…</span>
-    <span class="spacer"></span>
-    <button type="button" class="btn ghost hbtn" id="askBtn" aria-expanded="false" aria-controls="askPanel" title="Tailor the view with a priority or a question">🔎 Ask<span class="dot" id="askDot" hidden></span></button>
+    <button type="button" class="btn ghost hbtn" id="askBtn" aria-expanded="false" aria-controls="askPanel" title="Tailor the view with a priority or a question"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg><span class="hl">Ask</span><span class="dot" id="askDot" hidden></span></button>
     <div class="pop-wrap">
-      <button type="button" class="btn ghost hbtn" id="settingsBtn" aria-expanded="false" aria-controls="settingsPanel">⚙ Settings<span class="dot" id="settingsDot" hidden></span><span class="sr" id="settingsDotSr"></span></button>
+      <button type="button" class="btn ghost hbtn" id="settingsBtn" aria-expanded="false" aria-controls="settingsPanel"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 5v4M8 15v4"/></svg><span class="hl">Settings</span><span class="dot" id="settingsDot" hidden></span><span class="sr" id="settingsDotSr"></span></button>
       <div class="popover" id="settingsPanel" role="dialog" aria-label="Settings" hidden>
         <label class="ctl">Product<select id="product"><option value="">All products</option></select></label>
         <label class="ctl">Service line<select id="sline"><option value="">All service lines</option></select></label>
@@ -35,46 +55,41 @@
         <p class="small pop-note">The defaults are all products, all service lines, base sensitivity, KAM and Simple.</p>
       </div>
     </div>
-    <div class="export"><button class="btn" id="exportBtn" aria-haspopup="menu" aria-expanded="false">Export ▾</button>
+    <div class="export"><button class="btn" id="exportBtn" aria-haspopup="menu" aria-expanded="false">Export<svg class="ic caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg></button>
       <div class="menu" id="exportMenu" role="menu" hidden>
         <button role="menuitem" data-fmt="pptx">PowerPoint</button><button role="menuitem" data-fmt="pdf">PDF</button><button role="menuitem" data-fmt="xlsx">Excel</button>
       </div></div>
+
   </div>
-</header>
-<div class="strip" id="disclaimerStrip">Prototype · synthetic data · not audited</div>
+</div>
+<div class="filters" id="filterRow">
+  <label class="ctl">Period<select id="period">
+      <option value="2025">2025 (Jan–Dec)</option>
+      <option value="2025-Q1">2025 Q1</option>
+      <option value="2025-Q2">2025 Q2</option>
+      <option value="2025-Q3">2025 Q3</option>
+      <option value="2025-Q4">2025 Q4</option>
+    </select></label>
+  <label class="ctl"><span>Compare with <span class="gl" data-term="baseline" tabindex="0">(baseline)</span></span><select id="base"></select></label>
+</div>
 <div class="askpanel" id="askPanel" role="region" aria-label="Ask" hidden>
-  <div class="prompt">🔎 <input id="q" type="text" aria-label="State a priority or a question" placeholder="State a priority… e.g. “Focus on water and emissions” or “Compare our circular service with home washing”"><button class="btn" id="qBtn">Tailor view</button></div>
+  <div class="prompt"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg><input id="q" type="text" aria-label="State a priority or a question" placeholder="State a priority… e.g. “Focus on water and emissions” or “Compare our circular service with home washing”"><button class="btn" id="qBtn">Tailor view</button></div>
   <div class="chips" id="pchips"></div>
   <div class="interp" id="interp"></div>
 </div>
 </div>
-<div class="wrap">
-<nav id="nav">
-  <a data-v="meeting" href="#" class="on">Meeting</a>
-  <div class="sub kam-only">Before the meeting</div>
-  <a data-v="intel" href="#" class="kam-only">Account intelligence</a>
-  <div class="sub">Detail</div>
-  <a data-v="overview" href="#">Overview</a>
-  <a data-v="sites" href="#">Sites &amp; drill-down</a>
-  <a data-v="vs_diy" href="#">Service vs do-it-yourself</a>
-  <a data-v="growth" href="#">Growth opportunities</a>
-  <a data-v="footprint" href="#">Footprint &amp; handprint</a>
-  <a data-v="circularity" href="#">Circularity &amp; repairs</a>
-  <a data-v="steering" href="#">Steering committee</a>
-  <div class="sub">Trust</div>
-  <a data-v="fit" href="#">Built on Lindström's work</a>
-  <a data-v="methodology" href="#">Methodology &amp; assumptions</a>
-  <a data-v="readiness" href="#">Data readiness</a>
-</nav>
+
 <main id="main">
   <div id="pageHead"></div>
   <div id="page" class="mods"></div>
 </main>
 </div>
+</div>
 <div class="drawer" id="drawer"><span class="x" id="drawerX">✕</span><div id="drawerBody"></div></div>
 <div class="toast" id="toast"></div>
 <div class="gtip" id="gtip" role="tooltip" hidden></div>
 <script src="/web/modules.js"></script>
+<script src="/web/layout.js"></script>
 <script src="/web/app.js"></script>
 </body>
 </html>
