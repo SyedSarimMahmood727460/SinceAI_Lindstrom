@@ -119,7 +119,7 @@ def _biggest(review, k):
 
 
 def _growth(review, k):
-    """Used once ReviewModel.growth exists (Task 6): a dict or model with `statement`
+    """ReviewModel.growth (metrics/growth.py): a dict or model with `statement`
     (or `summary`), optional `what_to_say` and `value_refs`."""
     g = getattr(review, "growth", None)
     if not g:
@@ -128,9 +128,9 @@ def _growth(review, k):
     statement = get("statement") or get("summary")
     if not statement:
         return None
-    return {"id": "growth", "title": "Growth compared with the previous period",
+    return {"id": "growth", "title": "Growing together",
             "statement": str(statement), "relatable": None,
-            "what_to_say": get("what_to_say") or "Ask what is driving the change.",
+            "what_to_say": get("what_to_say") or "Ask which sites and services come next.",
             "detail_view": "growth", "value_refs": list(get("value_refs") or [])}
 
 

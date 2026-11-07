@@ -104,4 +104,6 @@ class ReviewModel(BaseModel):
     methodology: dict[str, Any]
     data_quality: dict[str, Any]
     dto: Dto | None = None
+    # growth opportunities (design §8b G7): metrics/growth.py output; None without inputs
+    growth: dict[str, Any] | None = None
     story: list[dict[str, Any]] = Field(default_factory=list)

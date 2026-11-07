@@ -21,6 +21,11 @@ ROOT = Path(__file__).resolve().parent.parent
 CONTRACT_KEY = "contract_price_eur_per_year"
 CONTRACT = {"label": "Lindström contract price", "unit": "EUR/year"}
 _ACCOUNT_ID = re.compile(r"[A-Za-z0-9_-]+")
+# Growth inputs (design §8b G7): stored with the DIY inputs, validated here.
+GROWTH_INT_KEYS = ("extra_sites", "extra_wearers")
+GROWTH_LINES_KEY = "extra_service_lines"
+GROWTH_PRICE_KEY = "expansion_price_eur_per_site_year"
+GROWTH_KEYS = (*GROWTH_INT_KEYS, GROWTH_LINES_KEY, GROWTH_PRICE_KEY)
 
 
 def inputs_dir() -> Path:
@@ -34,14 +39,33 @@ def _path(account_id: str) -> Path:
 
 
 def _allowed(spec: dict) -> set[str]:
-    return {CONTRACT_KEY} | {f"{k}{sfx}" for k in spec for sfx in ("", "_low", "_high")}
+    return ({CONTRACT_KEY, *GROWTH_KEYS}
+            | {f"{k}{sfx}" for k in spec for sfx in ("", "_low", "_high")})
 
 
-def validate_inputs(data: dict, spec: dict) -> dict:
+def catalogue_ids() -> set[str]:
+    from config.loader import load_yaml
+    return {x["id"] for x in load_yaml("service_catalogue.yaml")}
+
+
+def _validate_lines(v, known: set[str] | None) -> list[str]:
+    if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+        raise ValueError(f"{GROWTH_LINES_KEY}: must be a list of service catalogue ids")
+    known = catalogue_ids() if known is None else known
+    unknown = [x for x in v if x not in known]
+    if unknown:
+        raise ValueError(f"{GROWTH_LINES_KEY}: unknown service catalogue id(s): "
+                         f"{', '.join(unknown)} (known: {', '.join(sorted(known))})")
+    return list(dict.fromkeys(v))
+
+
+def validate_inputs(data: dict, spec: dict, known_lines: set[str] | None = None) -> dict:
     """Strictly validated copy of `data`: known keys, finite numbers >= 0, low <= value <= high.
 
     A null value means "not entered" and is dropped. Strings (also "2,5") are rejected; the UI
-    normalises decimal commas before sending.
+    normalises decimal commas before sending. Growth inputs: `extra_sites` / `extra_wearers`
+    are whole numbers >= 0, `extra_service_lines` a list of service catalogue ids
+    (`known_lines`, default: config/service_catalogue.yaml).
     """
     if not isinstance(data, dict):
         raise ValueError("inputs must be an object of key: number")
@@ -53,6 +77,9 @@ def validate_inputs(data: dict, spec: dict) -> dict:
         if key not in allowed:
             raise ValueError(f"unknown input key: {key}")
         if v is None:
+            continue
+        if key == GROWTH_LINES_KEY:
+            out[key] = _validate_lines(v, known_lines)
             continue
         if isinstance(v, bool) or not isinstance(v, (int, float)):
             raise ValueError(f"{key}: must be a number, got {v!r}")
@@ -66,6 +93,8 @@ def validate_inputs(data: dict, spec: dict) -> dict:
             raise ValueError(f"{key}: must be > 0, got {v:g}")
         if v < 0:
             raise ValueError(f"{key}: must be >= 0, got {v:g}")
+        if key in GROWTH_INT_KEYS and not v.is_integer():
+            raise ValueError(f"{key}: must be a whole number, got {v:g}")
         out[key] = int(v) if v.is_integer() and abs(v) < 2 ** 53 else v
     for key, s in spec.items():
         lo = out.get(f"{key}_low", out.get(key, s["low"]))
@@ -109,6 +138,21 @@ def save_inputs(account_id: str, data: dict, spec: dict) -> dict:
     tmp.write_text(json.dumps(stored, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(tmp, path)
     return stored
+
+
+def growth_inputs(stored: dict) -> dict | None:
+    """The growth inputs the KAM entered, or None when nothing is set to size."""
+    values = stored.get("values", {})
+    g = {"extra_sites": int(values.get("extra_sites") or 0),
+         "extra_wearers": int(values.get("extra_wearers") or 0),
+         "extra_service_lines": list(values.get(GROWTH_LINES_KEY) or []),
+         "expansion_price_eur_per_site_year": values.get(GROWTH_PRICE_KEY)}
+    if not (g["extra_sites"] or g["extra_wearers"] or g["extra_service_lines"]):
+        return None
+    dates = stored.get("entered_at", {})
+    g["entered_at"] = max((dates[k] for k in GROWTH_KEYS if k in values and k in dates),
+                          default=None)
+    return g
 
 
 def effective_inputs(stored: dict, spec: dict) -> list[dict]:

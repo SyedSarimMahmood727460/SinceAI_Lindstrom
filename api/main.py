@@ -242,6 +242,12 @@ def config_glossary():
     return load_yaml("glossary.yaml")["terms"]
 
 
+@app.get("/config/service-catalogue")
+def config_service_catalogue():
+    """Lindström service lines for the growth levers (illustrative sizing defaults T12+)."""
+    return load_yaml("service_catalogue.yaml")
+
+
 @app.get("/config/internal-metrics")
 def config_internal_metrics():
     """Metric ids that are never customer-facing (the dashboard hides their modules)."""

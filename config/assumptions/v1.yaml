@@ -152,3 +152,28 @@ register:
   value_or_rule: 2 years (1.5-3); illustrative Nordic values
   confidence: Low
   treatment: Editable by the account manager
+- id: T12
+  assumption: Workwear typical volume and price (growth sizing)
+  value_or_rule: 1,500 kg/site/month (800-2,500); 3.0 EUR/kg (2.2-4.0); illustrative
+  confidence: Low
+  treatment: Replace with account data for production
+- id: T13
+  assumption: Mats typical volume and price (growth sizing)
+  value_or_rule: 100 kg/site/month (50-200); 4.0 EUR/kg (3.0-5.5); illustrative
+  confidence: Low
+  treatment: Replace with account data for production
+- id: T14
+  assumption: Washroom typical volume and price (growth sizing)
+  value_or_rule: 60 kg/site/month (30-120); 3.5 EUR/kg (2.5-5.0); illustrative
+  confidence: Low
+  treatment: Replace with account data for production
+- id: T15
+  assumption: Cleanroom typical volume and price (growth sizing)
+  value_or_rule: 200 kg/site/month (100-400); 8.0 EUR/kg (6.0-12.0); illustrative
+  confidence: Low
+  treatment: Replace with account data for production
+- id: T16
+  assumption: Hospitality textiles typical volume and price (growth sizing)
+  value_or_rule: 2,000 kg/site/month (1,000-4,000); 1.8 EUR/kg (1.4-2.5); illustrative
+  confidence: Low
+  treatment: Replace with account data for production

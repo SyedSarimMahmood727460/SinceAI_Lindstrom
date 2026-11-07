@@ -1,0 +1,44 @@
+# Lindström service catalogue for growth sizing (design §8b G7) and account intelligence (G8).
+# SYNTHETIC / ILLUSTRATIVE defaults (assumptions T12-T16, confidence Low): typical washed kg per
+# site per month and a typical Lindström price per kg, each as default / low / high.
+# The offer URLs are Lindström's public service pages (checked 2026-11-07).
+- id: workwear
+  name: Workwear
+  service_line: Workwear
+  description: Leased workwear, washed, repaired, delivered and recycled for a monthly fee.
+  typical_kg_per_site_month: {default: 1500, low: 800, high: 2500}
+  typical_price_eur_per_kg: {default: 3.0, low: 2.2, high: 4.0}
+  assumption_id: T12
+  lindstrom_offer_url: https://lindstromgroup.com/services/work-wear/
+- id: mats
+  name: Mats
+  service_line: Mats
+  description: Rented entrance and safety mats, swapped for clean ones on a schedule.
+  typical_kg_per_site_month: {default: 100, low: 50, high: 200}
+  typical_price_eur_per_kg: {default: 4.0, low: 3.0, high: 5.5}
+  assumption_id: T13
+  lindstrom_offer_url: https://lindstromgroup.com/services/mats/
+- id: washroom
+  name: Washroom
+  service_line: Washroom
+  description: Managed washroom supplies with laundered cotton towel rolls instead of paper.
+  typical_kg_per_site_month: {default: 60, low: 30, high: 120}
+  typical_price_eur_per_kg: {default: 3.5, low: 2.5, high: 5.0}
+  assumption_id: T14
+  lindstrom_offer_url: https://lindstromgroup.com/services/washroom/
+- id: cleanroom
+  name: Cleanroom
+  service_line: Cleanroom
+  description: Cleanroom garments laundered to ISO 14644 / GMP standards, with repairs and delivery.
+  typical_kg_per_site_month: {default: 200, low: 100, high: 400}
+  typical_price_eur_per_kg: {default: 8.0, low: 6.0, high: 12.0}
+  assumption_id: T15
+  lindstrom_offer_url: https://lindstromgroup.com/services/cleanroom/
+- id: hospitality_textiles
+  name: Hospitality textiles
+  service_line: Hospitality
+  description: Rented hotel bed linen and towels, laundered, delivered and replaced.
+  typical_kg_per_site_month: {default: 2000, low: 1000, high: 4000}
+  typical_price_eur_per_kg: {default: 1.8, low: 1.4, high: 2.5}
+  assumption_id: T16
+  lindstrom_offer_url: https://lindstromgroup.com/services/hotel-textiles/

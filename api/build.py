@@ -18,9 +18,10 @@ from insights.story import build_story
 from insights.rules import _weight, build_observations
 from metrics.dto import compute_dto
 from metrics.engine import Engine
+from metrics.growth import compute_growth
 from metrics.periods import period_months
 from model.contracts import MetricResult, Narrative, Observation
-from model.inputs_store import effective_inputs, load_inputs
+from model.inputs_store import effective_inputs, growth_inputs, load_inputs
 
 TREND_IDS = ["active_wearers", "garments_allocated", "active_assets_scanned", "repairs",
              "service_requests", "late_cycles"]
@@ -191,12 +192,19 @@ def build_review(con, params: ReviewParams, engine: Engine | None = None,
 
     # service vs do-it-yourself (account-manager inputs; customers see them read-only)
     spec = assumptions["dto_inputs"]
-    inputs = effective_inputs(load_inputs(acc, spec), spec)
+    stored = load_inputs(acc, spec)
+    inputs = effective_inputs(stored, spec)
     dto = _select_dto(compute_dto(engine, acc, params.period, params.product, sl,
                                   params.baseline_id, inputs, assumptions, results=account_all),
                       sens)
+    # growth opportunities (account-manager expansion inputs; account-wide, per year)
+    g_inputs = growth_inputs(stored)
+    growth = None if g_inputs is None else compute_growth(
+        engine, acc, params.period, params.baseline_id, stored, assumptions,
+        load_yaml("service_catalogue.yaml"), sensitivity=sens)
+    hashed = inputs if g_inputs is None else [inputs, g_inputs]
     inputs_hash = hashlib.sha256(
-        json.dumps(inputs, sort_keys=True).encode("utf-8")).hexdigest()[:8]
+        json.dumps(hashed, sort_keys=True).encode("utf-8")).hexdigest()[:8]
 
     # meta
     countries = sorted({r[2] for r in site_rows if r[2]})
@@ -238,6 +246,9 @@ def build_review(con, params: ReviewParams, engine: Engine | None = None,
     used = {a for k in kpis for a in k.assumptions}
     used |= {a for x in dto.lines for a in x.diy.assumptions}
     used |= set(dto.convenience["staff_hours_freed"].assumptions)
+    if growth is not None:
+        used |= {a for lv in growth["levers"] for k, m in lv.items()
+                 if isinstance(m, MetricResult) for a in m.assumptions}
     methodology = {
         "boundary": list(text["boundary"]),
         "assumptions_used": [r for r in assumptions["register"] if r["id"] in used],
@@ -259,7 +270,7 @@ def build_review(con, params: ReviewParams, engine: Engine | None = None,
         meta=meta, context=context, kpis=kpis, sites=sites, trends=trends,
         comparisons={"baselines": bl}, circularity=circ, observations=obs,
         narrative=Narrative(exec_summary="", discussion_points=[], generated_by="template"),
-        actions=actions, methodology=methodology, data_quality=data_quality, dto=dto)
+        actions=actions, methodology=methodology, data_quality=data_quality, dto=dto, growth=growth)
     review.story = build_story(review)
     review.narrative = _narrate(review, use_ai)
     return review
