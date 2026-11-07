@@ -1,5 +1,5 @@
 [
-  {"id": "story_cards", "pack": "general", "page": "story", "component": "story_cards",
+  {"id": "meeting_flow", "pack": "general", "page": "meeting", "component": "meeting_flow",
    "required_metrics": [], "priority_tags": [], "industries": ["*"]},
 
   {"id": "overview_kpis", "pack": "general", "page": "overview", "component": "kpi_row",

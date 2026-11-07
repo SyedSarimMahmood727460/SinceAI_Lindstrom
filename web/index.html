@@ -8,10 +8,10 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
+<div class="top">
 <header>
-  <div class="logo"><i></i>Lindström <small>· Customer Value &amp; Sustainability Review</small></div>
+  <div class="logo"><i></i>Lindström <small>Value Review</small></div>
   <div class="toolbar">
-    <span class="loading" id="loading">Loading…</span>
     <label class="ctl">Customer<select id="cust"></select></label>
     <label class="ctl">Period<select id="period">
       <option value="2025">2025 (Jan–Dec)</option>
@@ -20,41 +20,53 @@
       <option value="2025-Q3">2025 Q3</option>
       <option value="2025-Q4">2025 Q4</option>
     </select></label>
-    <label class="ctl">Product<select id="product"><option value="">All products</option></select></label>
-    <label class="ctl">Service line<select id="sline"><option value="">All service lines</option></select></label>
-    <label class="ctl"><span>Comparison <span class="gl" data-term="baseline" tabindex="0">baseline</span></span><select id="base"></select></label>
-    <label class="ctl"><span class="gl" data-term="range_sensitivity" tabindex="0">Sensitivity</span><select id="sens"><option value="low">Low</option><option value="base" selected>Base</option><option value="high">High</option></select></label>
-    <div class="ctl">Audience<div class="seg" id="aud"><button data-aud="kam" class="on">KAM</button><button data-aud="customer">Customer</button></div></div>
-    <div class="ctl">Detail<div class="seg" id="mode"><button data-mode="simple" class="on" title="Plain language: estimate pill, ranges as about X (between A and B)">Simple</button><button data-mode="expert" title="Status badges, z-scores, formulas and lineage">Expert</button></div></div>
+    <label class="ctl"><span>Compare with <span class="gl" data-term="baseline" tabindex="0">(baseline)</span></span><select id="base"></select></label>
+    <span class="loading" id="loading">Loading…</span>
+    <span class="spacer"></span>
+    <button type="button" class="btn ghost hbtn" id="askBtn" aria-expanded="false" aria-controls="askPanel" title="Tailor the view with a priority or a question">🔎 Ask<span class="dot" id="askDot" hidden></span></button>
+    <div class="pop-wrap">
+      <button type="button" class="btn ghost hbtn" id="settingsBtn" aria-expanded="false" aria-controls="settingsPanel">⚙ Settings<span class="dot" id="settingsDot" hidden></span><span class="sr" id="settingsDotSr"></span></button>
+      <div class="popover" id="settingsPanel" role="dialog" aria-label="Settings" hidden>
+        <label class="ctl">Product<select id="product"><option value="">All products</option></select></label>
+        <label class="ctl">Service line<select id="sline"><option value="">All service lines</option></select></label>
+        <label class="ctl"><span class="gl" data-term="range_sensitivity" tabindex="0">Sensitivity</span><select id="sens"><option value="low">Low</option><option value="base" selected>Base</option><option value="high">High</option></select></label>
+        <div class="ctl">Audience<div class="seg" id="aud" role="group" aria-label="Audience"><button type="button" data-aud="kam" class="on" aria-pressed="true">KAM</button><button type="button" data-aud="customer" aria-pressed="false">Customer</button></div></div>
+        <div class="ctl">Detail<div class="seg" id="mode" role="group" aria-label="Detail"><button type="button" data-mode="simple" class="on" aria-pressed="true" title="Plain language: estimate pill, ranges as about X (between A and B)">Simple</button><button type="button" data-mode="expert" aria-pressed="false" title="Status badges, z-scores, formulas and lineage">Expert</button></div></div>
+        <p class="small pop-note">The defaults are all products, all service lines, base sensitivity, KAM and Simple.</p>
+      </div>
+    </div>
     <div class="export"><button class="btn" id="exportBtn" aria-haspopup="menu" aria-expanded="false">Export ▾</button>
       <div class="menu" id="exportMenu" role="menu" hidden>
         <button role="menuitem" data-fmt="pptx">PowerPoint</button><button role="menuitem" data-fmt="pdf">PDF</button><button role="menuitem" data-fmt="xlsx">Excel</button>
       </div></div>
   </div>
 </header>
+<div class="strip" id="disclaimerStrip">Prototype · synthetic data · not audited</div>
+<div class="askpanel" id="askPanel" role="region" aria-label="Ask" hidden>
+  <div class="prompt">🔎 <input id="q" type="text" aria-label="State a priority or a question" placeholder="State a priority… e.g. “Focus on water and emissions” or “Compare our circular service with home washing”"><button class="btn" id="qBtn">Tailor view</button></div>
+  <div class="chips" id="pchips"></div>
+  <div class="interp" id="interp"></div>
+</div>
+</div>
 <div class="wrap">
 <nav id="nav">
-  <div class="sub">Review</div>
-  <a data-v="story" class="on">Customer story</a>
+  <a data-v="meeting" class="on">Meeting</a>
+  <div class="sub kam-only">Before the meeting</div>
+  <a data-v="intel" class="kam-only">Account intelligence</a>
+  <div class="sub">Detail</div>
   <a data-v="overview">Overview</a>
   <a data-v="sites">Sites &amp; drill-down</a>
+  <a data-v="vs_diy">Service vs do-it-yourself</a>
+  <a data-v="growth">Growth opportunities</a>
   <a data-v="footprint">Footprint &amp; handprint</a>
   <a data-v="circularity">Circularity &amp; repairs</a>
-  <a data-v="vs_diy">Service vs do-it-yourself</a>
   <a data-v="steering">Steering committee</a>
-  <div class="sub">Opportunities</div>
-  <a data-v="growth">Growth opportunities</a>
-  <a data-v="intel">Account intelligence</a>
   <div class="sub">Trust</div>
   <a data-v="fit">Built on Lindström's work</a>
   <a data-v="methodology">Methodology &amp; assumptions</a>
   <a data-v="readiness">Data readiness</a>
 </nav>
 <main id="main">
-  <div class="banner">⚠ <b id="disclaimer">Prototype · synthetic data · not audited</b> · Lindström × Since AI 2026 data pack. Values are illustrative and are not Lindström or customer claims. Every figure carries a status badge in Expert detail. Click any tile to see how it's calculated.</div>
-  <div class="prompt">🔎 <input id="q" type="text" placeholder="State a priority… e.g. “Focus on water and emissions” or “Compare our circular service with home washing”"><button class="btn" id="qBtn">Tailor view</button></div>
-  <div class="chips" id="pchips"></div>
-  <div class="interp" id="interp"></div>
   <div id="pageHead"></div>
   <div id="page" class="mods"></div>
 </main>

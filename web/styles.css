@@ -150,3 +150,30 @@ ol.sources{margin:0;padding-left:20px;font-size:12.5px}ol.sources li{margin-bott
 table.fit td{vertical-align:top}
 @media (max-width:1100px){.mods>.mod.w8{grid-column:span 12}.dgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .pill.entered{border-color:var(--calc);color:var(--calc);margin-left:3px}
+
+/* ---- calm header: Settings popover, Ask panel, disclaimer strip, regrouped nav (meeting flow) ---- */
+.top{position:sticky;top:0;z-index:20}
+.top header{position:relative;height:60px;min-height:0;flex-wrap:nowrap}
+.toolbar{flex:1;flex-wrap:nowrap;align-items:end;margin-left:12px}
+.toolbar .spacer{flex:1}
+.toolbar select{max-width:280px}
+.hbtn{position:relative;padding:7px 12px;white-space:nowrap}
+.hbtn[aria-expanded="true"]{background:#eef2f9;border-color:var(--navy)}
+.hbtn .dot{position:absolute;top:3px;right:3px;width:8px;height:8px;border-radius:50%;background:var(--red)}
+.hbtn .dot[hidden]{display:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.pop-wrap{position:relative}
+.popover{position:absolute;right:0;top:calc(100% + 6px);width:290px;display:grid;gap:12px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 24px rgba(27,42,74,.16);padding:14px 16px;z-index:30}
+.popover[hidden]{display:none}
+.popover .ctl select{width:100%;max-width:none}
+.popover .seg{align-self:start}
+.pop-note{margin:0}
+.strip{height:24px;line-height:23px;padding:0 20px;font-size:11.5px;color:#7a5200;background:var(--amber-bg);border-bottom:1px solid var(--amber-line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.askpanel{position:absolute;left:0;right:0;top:100%;background:#fff;border-bottom:1px solid var(--line);box-shadow:0 8px 22px rgba(27,42,74,.14);padding:12px 20px 6px;z-index:25}
+.askpanel[hidden]{display:none}
+.askpanel .prompt{margin-bottom:6px}
+.askpanel .interp{margin:0 0 8px}
+.wrap{min-height:calc(100vh - 84px)}
+nav{top:84px;height:calc(100vh - 84px);overflow-y:auto}
+body.aud-customer .kam-only{display:none}
+button.chip{color:var(--ink)}button.chip.on{color:#fff}button.chip.sugg{color:var(--mute)}

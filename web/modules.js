@@ -192,6 +192,11 @@ const rawNum = v => (v == null ? '' : String(v));
 const FIT_KIND = {PUBLIC_REFERENCE: ['PUBLIC', 'b-PUBLIC'], DATA_PACK: ['DATA PACK', 'b-DATAPACK'], BRIEF: ['BRIEF', 'b-BRIEF']};
 
 const Components = {
+  // Guided meeting flow (design §3): the landing page. Stub until the step renderer lands (Task 3).
+  meeting_flow(ctx) {
+    return {html: '<div class="card empty">Meeting flow loads here</div>'};
+  },
+
   // Customer story (G9): plain-language headline cards from review.story; the statements are
   // filled by the engine (insights/story.py), the UI adds no numbers.
   story_cards(ctx) {
@@ -399,7 +404,9 @@ const Components = {
     const legend = (m.status_legend || []).map(s => `<p><span class="badge b-${esc(s.status)}">${esc(s.status)}</span> ${esc(s.meaning)}</p>`).join('') +
       '<p><span class="badge b-SYN">SYN</span> Synthetic source value from the data pack (provenance).</p>' +
       '<p><span class="warn">⚠</span> An input carries a data-consistency warning (see Data readiness).</p>';
-    return {html: `<div class="grid c2"><div class="card"><h2>Calculation boundary</h2><ul class="tight">${(m.boundary || []).map(b => `<li>${esc(b)}</li>`).join('')}</ul>
+    // the long disclaimer (formerly the banner on every page) leads the methodology
+    const about = `<div class="banner">⚠ <b>${esc(ctx.R.meta.disclaimer)}</b> · Lindström × Since AI 2026 data pack. Values are illustrative and are not Lindström or customer claims. Every figure carries a status badge in Expert detail. Click any tile to see how it's calculated.</div>`;
+    return {html: `${about}<div class="grid c2"><div class="card"><h2>Calculation boundary</h2><ul class="tight">${(m.boundary || []).map(b => `<li>${esc(b)}</li>`).join('')}</ul>
       <p class="small">Baseline in use: <b>${esc(ctx.R.meta.baseline.name)}</b> · sensitivity <b>${esc(ctx.R.meta.sensitivity)}</b> · assumption set ${esc(ctx.R.meta.assumption_set_version)}</p></div>
       <div class="card"><h2>Status legend</h2>${legend}</div></div>
       <div class="card" style="margin-top:12px"><h2>Limitations</h2><ul class="tight">${(m.limitations || []).map(b => `<li>${esc(b)}</li>`).join('')}</ul></div>`};
@@ -457,7 +464,7 @@ const Components = {
       fig('Garment utilisation', c.utilisation, node) + fig('Service requests per 100 wearers', c.service_requests_per_100w, node);
     const hyg = d.hygiene_note ? `<p>${esc(d.hygiene_note)}</p>` : `<p class="small">No industry-specific hygiene note for ${esc(ctx.R.meta.node.industry)}.</p>`;
     const col = (t, body) => `<div class="card dcol"><h2>${t}</h2>${body}</div>`;
-    return {html: `<div class="diy-head"><span>Lindström service vs <b>${esc(bname)}</b> · ${esc(ctx.R.meta.period)} · change the comparison in the toolbar</span>${chip}</div>${partial}
+    return {html: `<div class="diy-head"><span>Lindström service vs <b>${esc(bname)}</b> · ${esc(ctx.R.meta.period)} · change it under Compare with</span>${chip}</div>${partial}
       <div class="dgrid">${col('Environment', env)}${col('Cost', cost)}${col('Time', time)}${col('Hygiene', hyg)}</div>
       <p class="small">€, hours and CO₂e are shown side by side and never added into one score. Click any figure to see how it is calculated.</p>`};
   },
@@ -562,7 +569,7 @@ const Components = {
   // ---- Account intelligence (design §8b G8): POST /intel; no engine numbers are mixed in ----
   intel_page(ctx) {
     const I = ctx.ext.intel, name = ctx.R.meta.node.name;
-    if (ctx.S.audience === 'customer') return {html: '<div class="card empty">Account intelligence is a preparation tool for the account manager. Switch the audience to KAM to use it.</div>'};
+    if (ctx.S.audience === 'customer') return {html: '<div class="card empty">Account intelligence is a preparation tool for the account manager. Switch the audience to KAM in Settings to use it.</div>'};
     const snaps = (I.snapshots || []).map(s => `<button type="button" class="chip ${I.report && I.report.company === s.company ? 'on' : ''}" data-intel-snap="${esc(s.company)}">${esc(s.company)} · snapshot ${esc(s.generated_at)}</button>`).join('');
     const note = `<div class="note">${esc(name)} is a fictional customer, so there is nothing public to research. Try the example public company${snaps ? ' below' : ''}. In production the account's legal name would come from the CRM.</div>`;
     const form = `<form data-form="intel" class="intel-form" novalidate>

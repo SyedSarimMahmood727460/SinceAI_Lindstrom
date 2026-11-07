@@ -6,13 +6,13 @@ from pathlib import Path
 from config.loader import CONFIG_DIR, load_yaml
 
 PACKS = {"general", "sustainable", "financial"}
-PAGES = {"story", "overview", "sites", "footprint", "circularity", "steering", "methodology", "readiness",
+PAGES = {"meeting", "overview", "sites", "footprint", "circularity", "steering", "methodology", "readiness",
          "vs_diy", "growth", "intel", "fit"}
 COMPONENTS = {
     "kpi_row", "observations", "site_rank", "site_table", "site_detail", "footprint_cards",
     "footprint_pct_chart", "baseline_compare_chart", "repairs_month_chart", "repairs_type_chart",
     "waste_routes_chart", "exec_summary", "discussion_points", "action_table", "methodology",
-    "assumption_table", "data_quality", "readiness_table", "story_cards",
+    "assumption_table", "data_quality", "readiness_table", "meeting_flow",
     "diy_compare", "diy_cost_chart", "diy_inputs", "growth_inputs", "growth_levers", "intel_page",
     "fit_page",
 }
@@ -41,13 +41,48 @@ def test_modules_schema():
         assert m["industries"] == ["*"] or all(isinstance(i, str) for i in m["industries"])
 
 
-def test_story_is_the_landing_page():
-    """The customer story (G9) is the first module, and the nav opens on it."""
+def test_meeting_is_the_landing_page():
+    """The guided meeting flow is the first module, and the nav opens on it."""
     mods = _modules()
-    assert mods[0]["page"] == "story" and mods[0]["component"] == "story_cards"
+    assert mods[0]["page"] == "meeting" and mods[0]["component"] == "meeting_flow"
+    assert "story" not in {m["page"] for m in mods}
     html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
     first_nav = re.search(r'<a data-v="([a-z_]+)"', html).group(1)
-    assert first_nav == "story"
+    assert first_nav == "meeting"
+    app = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    assert re.search(r"view: 'meeting'", app)
+
+
+def test_header_has_settings_ask_and_disclaimer_strip():
+    """The calm header: Settings and Ask toggles (buttons with aria-expanded), one-line disclaimer strip."""
+    html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+    for el in ("settingsBtn", "settingsPanel", "askBtn", "askPanel", "disclaimerStrip"):
+        assert f'id="{el}"' in html, el
+    for btn in ("settingsBtn", "askBtn"):
+        tag = re.search(rf'<button[^>]*id="{btn}"[^>]*>', html).group(0)
+        assert 'aria-expanded="false"' in tag and "aria-controls" in tag, btn
+    strip = re.search(r'id="disclaimerStrip"[^>]*>([^<]*)<', html).group(1)
+    assert strip == "Prototype · synthetic data · not audited"
+    settings = html[html.index('id="settingsPanel"'):]
+    settings = settings[:settings.index('id="exportBtn"')]
+    for ctl in ('id="product"', 'id="sline"', 'id="sens"', 'id="aud"', 'id="mode"'):
+        assert ctl in settings, ctl
+    ask = html[html.index('id="askPanel"'):]
+    for ctl in ('id="q"', 'id="pchips"', 'id="interp"'):
+        assert ctl in ask, ctl
+
+
+def test_nav_groups():
+    """Meeting · Before the meeting (KAM only) · Detail · Trust; every page keeps a nav link."""
+    html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+    nav = html[html.index('<nav'):html.index('</nav>')]
+    order = re.findall(r'<div class="sub[^"]*">([^<]+)</div>|<a data-v="([a-z_]+)"', nav)
+    flat = [a or b for a, b in order]
+    assert flat == ["meeting", "Before the meeting", "intel",
+                    "Detail", "overview", "sites", "vs_diy", "growth", "footprint", "circularity", "steering",
+                    "Trust", "fit", "methodology", "readiness"]
+    assert re.search(r'<a data-v="intel"[^>]*class="[^"]*kam-only', nav)
+    assert re.search(r'<div class="sub[^"]*kam-only[^"]*">Before the meeting', nav)
 
 
 def test_components_are_implemented_in_web():

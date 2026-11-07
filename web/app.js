@@ -13,7 +13,7 @@ const SUGGESTED_PROMPTS = [  // pack sheet Suggested_Prompts
   'Prepare five discussion points for the annual steering committee.',
 ];
 const PAGES = {
-  story: null,  // title built from the review
+  meeting: null,  // the meeting flow renders its own step titles
   overview: null,  // title built from the review
   sites: ['Sites & drill-down', 'Customer-level consolidation of the delivery sites. Sort any column, or click a row to drill down.'],
   footprint: ['Footprint & handprint', "Lindström's allocated service footprint compared with the selected baseline for the same washed kilograms. Ranges show low–high sensitivity."],
@@ -28,7 +28,7 @@ const PAGES = {
 };
 // Components that show the account's figures; on an empty filter they say "No data for this filter".
 // Growth is account-wide (not filtered); intelligence and the fit page do not use the review figures.
-const STATIC_COMPONENTS = new Set(['methodology', 'assumption_table', 'data_quality', 'readiness_table', 'discussion_points',
+const STATIC_COMPONENTS = new Set(['meeting_flow', 'methodology', 'assumption_table', 'data_quality', 'readiness_table', 'discussion_points',
   'growth_inputs', 'growth_levers', 'intel_page', 'fit_page']);
 const SOURCE_LABEL = {prompt: 'from your prompt', chips: 'your selection', customer: "customer's stated priorities + industry default",
   industry: 'industry default'};
@@ -36,7 +36,7 @@ const SOURCE_LABEL = {prompt: 'from your prompt', chips: 'your selection', custo
 const MODE_KEY = 'vr.mode';
 function storedMode() { try { return localStorage.getItem(MODE_KEY) === 'expert' ? 'expert' : 'simple'; } catch (e) { return 'simple'; } }
 const S = {account: null, period: '2025', product: '', serviceLine: '', baseline: 'B_LOCAL', sens: 'base', priorities: null,
-  prioritySource: null, audience: 'kam', view: 'story', site: null, sort: null, intentText: '', mode: storedMode()};
+  prioritySource: null, audience: 'kam', view: 'meeting', site: null, sort: null, intentText: '', mode: storedMode()};
 let R = null, siteReview = null, MODULES = [], ACCOUNTS = [], INTERNAL = [], ASSUMPTIONS = {};
 // State for the DIY, growth, intelligence and fit pages (passed to the components as ctx.ext).
 const GROWTH_SENT = {};  // account -> growth inputs last saved in this session (kept when review.growth is null)
@@ -113,11 +113,12 @@ const kpiOf = id => R.kpis.find(k => k.metric_id === id) || null;
 
 function render() {
   if (!R) return;
-  $('disclaimer').textContent = R.meta.disclaimer;
   $('cust').value = S.account; $('period').value = S.period; $('base').value = S.baseline; $('sens').value = S.sens;
-  document.querySelectorAll('#aud button').forEach(b => b.classList.toggle('on', b.dataset.aud === S.audience));
+  document.querySelectorAll('#aud button').forEach(b => { const on = b.dataset.aud === S.audience; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
+  document.body.classList.toggle('aud-customer', S.audience === 'customer');
   renderProducts();
   renderServiceLines();
+  renderSettingsDot();
   renderChips();
   renderInterp();
   renderPage();
@@ -143,17 +144,29 @@ function renderServiceLines() {
 }
 
 function renderMode() {
-  document.querySelectorAll('#mode button').forEach(b => b.classList.toggle('on', b.dataset.mode === S.mode));
+  document.querySelectorAll('#mode button').forEach(b => { const on = b.dataset.mode === S.mode; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
   document.body.classList.toggle('simple', S.mode === 'simple');
   document.body.classList.toggle('expert', S.mode === 'expert');
+  renderSettingsDot();
+}
+
+/** The Settings button shows a dot when any setting in the popover differs from its default;
+ * the Ask button shows one while a stated priority tailors the view. */
+const SETTING_DEFAULTS = {product: '', serviceLine: '', sens: 'base', audience: 'kam', mode: 'simple'};
+function renderSettingsDot() {
+  const changed = Object.entries(SETTING_DEFAULTS).some(([k, v]) => S[k] !== v);
+  $('settingsDot').hidden = !changed;
+  $('settingsDotSr').textContent = changed ? ' (changed from the defaults)' : '';
+  $('askDot').hidden = !(S.priorities && S.priorities.length);
 }
 
 function renderChips() {
-  const ap = activePri();
+  const ap = activePri(), had = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.chip : null;
   $('pchips').innerHTML = Object.entries(PRI).map(([k, l]) => {
     const i = ap.indexOf(k);
-    return `<span class="chip ${i >= 0 ? 'on' : ''}" data-chip="${k}">${i >= 0 ? `<sup>${i + 1}</sup> ` : ''}${l}</span>`;
-  }).join('') + SUGGESTED_PROMPTS.map(p => `<span class="chip sugg" data-prompt="${esc(p)}">${esc(p)}</span>`).join('');
+    return `<button type="button" class="chip ${i >= 0 ? 'on' : ''}" data-chip="${k}" aria-pressed="${i >= 0}">${i >= 0 ? `<sup>${i + 1}</sup> ` : ''}${l}</button>`;
+  }).join('') + SUGGESTED_PROMPTS.map(p => `<button type="button" class="chip sugg" data-prompt="${esc(p)}">${esc(p)}</button>`).join('');
+  if (had) { const b = $('pchips').querySelector(`[data-chip="${had}"]`); if (b) b.focus(); }  // keyboard toggling keeps its place
 }
 
 function renderInterp() {
@@ -197,10 +210,7 @@ function filterText() {
 
 function pageHead() {
   const n = R.meta.node, pl = $('period').selectedOptions[0];
-  if (S.view === 'story') {
-    return `<h1>${esc(n.name)} — Customer story ${esc(pl ? pl.textContent : R.meta.period)}</h1>
-      <p class="lead">Plain-language headlines to walk the customer through, each with a talking point and a link to the detail${filterText()}.</p>`;
-  }
+  if (S.view === 'meeting') return '';  // the meeting flow carries its own step titles
   if (S.view === 'overview') {
     const sites = kpiOf('sites');
     return `<h1>${esc(n.name)} — Annual value review ${esc(pl ? pl.textContent : R.meta.period)}</h1>
@@ -538,7 +548,10 @@ ${esc(formulas)}</div>`}`);
 }
 
 // ---------- interaction ----------
-function go(view) { if (!PAGES.hasOwnProperty(view)) return; S.view = view; closeDrawer(); renderPage(); window.scrollTo(0, 0); }
+function go(view) {
+  if (!PAGES.hasOwnProperty(view)) return;
+  if (view === 'intel' && S.audience === 'customer') view = 'meeting';  // preparation tool: KAM only
+  S.view = view; closeDrawer(); renderPage(); window.scrollTo(0, 0); }
 
 /** Story "Show the detail": detail_view names a module or a page (vs_diy, growth); an unknown
  * target falls back to the overview. */
@@ -649,7 +662,21 @@ async function runPrompt(text) {
   if (vs.view && PAGES.hasOwnProperty(vs.view)) S.view = vs.view;
   S.intentText = it;
   await load();
+  if (R) { askPanel(false); $('askBtn').focus(); }  // the prompt is applied: the panel steps aside
 }
+
+// ---------- Settings popover and Ask panel ----------
+/** Open, close (`on` false) or toggle (`on` undefined) a header panel; opening one closes the other. */
+function headerPanel(btnId, panelId, on, focusSel) {
+  const p = $(panelId), open = on == null ? p.hidden : on;
+  if (open === !p.hidden) return;
+  p.hidden = !open; $(btnId).setAttribute('aria-expanded', String(open));
+  if (open) {
+    const f = p.querySelector(focusSel); if (f) f.focus();
+  }
+}
+const settingsPanel = on => { if (on !== false && $('settingsPanel').hidden) askPanel(false); headerPanel('settingsBtn', 'settingsPanel', on, 'select:not(:disabled),button'); };
+const askPanel = on => { if (on !== false && $('askPanel').hidden) settingsPanel(false); headerPanel('askBtn', 'askPanel', on, '#q'); };
 
 const EXPORT_EXT = {pptx: 'pptx', pdf: 'pdf', xlsx: 'xlsx'};
 function exportMenu(open) {
@@ -693,6 +720,8 @@ function busy(on) { $('loading').classList.toggle('on', on); $('main').classList
 
 document.addEventListener('click', e => {
   if (!e.target.closest('.export')) exportMenu(false);
+  if (!e.target.closest('.pop-wrap') && e.target.isConnected) settingsPanel(false);
+  if (!e.target.closest('#askPanel,#askBtn') && e.target.isConnected) askPanel(false);
   const t = e.target.closest('[data-copy],[data-copy-growth],[data-detail],[data-mode-set],[data-fmt],[data-local],[data-explain],[data-evidence],[data-site],[data-go],[data-sort],[data-chip],[data-prompt],[data-close-site],[data-action],[data-intel-snap]');
   if (!t) return;
   const d = t.dataset;
@@ -718,9 +747,11 @@ document.querySelectorAll('nav a').forEach(a => { a.onclick = () => go(a.dataset
 $('drawerX').onclick = closeDrawer;
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    const menuOpen = !$('exportMenu').hidden;
-    closeDrawer(); exportMenu(false); hideTip();
+    const menuOpen = !$('exportMenu').hidden, setOpen = !$('settingsPanel').hidden, askOpen = !$('askPanel').hidden;
+    closeDrawer(); exportMenu(false); hideTip(); settingsPanel(false); askPanel(false);
     if (menuOpen) $('exportBtn').focus();
+    else if (setOpen) $('settingsBtn').focus();
+    else if (askOpen) $('askBtn').focus();
     return;
   }
   // clickable figures (role="button") open with Enter / Space like a button
@@ -738,7 +769,9 @@ $('gtip').addEventListener('mouseleave', hideTipSoon);
 window.addEventListener('scroll', onScrollTip, {passive: true});
 $('q').addEventListener('keydown', e => { if (e.key === 'Enter') runPrompt($('q').value); });
 $('qBtn').onclick = () => runPrompt($('q').value);
-$('exportBtn').onclick = () => exportMenu();
+$('exportBtn').onclick = () => { settingsPanel(false); askPanel(false); exportMenu(); };
+$('settingsBtn').onclick = () => { exportMenu(false); settingsPanel(); };
+$('askBtn').onclick = () => { exportMenu(false); askPanel(); };
 document.querySelectorAll('#mode button').forEach(b => { b.onclick = () => { if (S.mode !== b.dataset.mode) setMode(b.dataset.mode); }; });
 $('cust').onchange = e => { switchAccount(e.target.value); load(); };
 $('period').onchange = e => { S.period = e.target.value; load(); };
@@ -746,7 +779,12 @@ $('product').onchange = e => { S.product = e.target.value; load(); };
 $('sline').onchange = e => { S.serviceLine = e.target.value; load(); };
 $('base').onchange = e => { S.baseline = e.target.value; load(); };
 $('sens').onchange = e => { S.sens = e.target.value; load(); };
-document.querySelectorAll('#aud button').forEach(b => { b.onclick = () => { if (S.audience !== b.dataset.aud) { S.audience = b.dataset.aud; closeDrawer(); load(); } }; });
+document.querySelectorAll('#aud button').forEach(b => { b.onclick = () => {
+  if (S.audience === b.dataset.aud) return;
+  S.audience = b.dataset.aud; closeDrawer();
+  if (S.audience === 'customer' && S.view === 'intel') S.view = 'meeting';  // no Account intelligence in the customer view
+  load();
+}; });
 
 async function init() {
   VR.setMode(S.mode); renderMode();
