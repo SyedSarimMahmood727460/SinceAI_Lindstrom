@@ -134,7 +134,10 @@ def test_meeting_short_titles_and_empty_filter():
     """Steps 3 and 4 use short headlines with the full statement as the lead line; an empty filter
     on step 3 says there is no data (not "even"); a net range across zero hedges the step-2 title."""
     code = _meeting_js()
-    assert "your other sites`" in code and "lead: c ? c.statement : ''" in code
+    assert "siteHeadline(f, " in code and "lead: c ? c.statement : ''" in code
+    # the headline helper reads as a plain sentence ("<site> washes more per wearer than your other sites")
+    src = (Path(__file__).resolve().parents[1] / "web" / "modules.js").read_text(encoding="utf-8")
+    assert "washes more per wearer" in src and "than your other sites`" in src
     assert "`Grow together: about ${fmtCompact(avoided.value, avoided.unit)} a year`" in code
     assert "lead: g.statement" in code and '<p class="lead mlead">' in code
     assert "title: 'No site data for this filter'" in code
