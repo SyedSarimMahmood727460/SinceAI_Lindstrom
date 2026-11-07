@@ -155,6 +155,17 @@ def growth_inputs(stored: dict) -> dict | None:
     return g
 
 
+def stored_growth(stored: dict) -> dict:
+    """The growth inputs exactly as stored (also when nothing is set to size, e.g. only an
+    expansion price), with the date each was entered."""
+    values, dates = stored.get("values", {}), stored.get("entered_at", {})
+    return {"extra_sites": values.get("extra_sites"),
+            "extra_wearers": values.get("extra_wearers"),
+            "extra_service_lines": list(values.get(GROWTH_LINES_KEY) or []),
+            GROWTH_PRICE_KEY: values.get(GROWTH_PRICE_KEY),
+            "entered_at": {k: dates[k] for k in GROWTH_KEYS if k in values and k in dates}}
+
+
 def effective_inputs(stored: dict, spec: dict) -> list[dict]:
     """Every input with its effective value and range: defaults unless the KAM entered one.
 

@@ -183,7 +183,7 @@ function fig(label, m, node, cls = '') {
   const spread = m.range && m.range.low != null && m.range.high != null && m.range.low !== m.range.high;
   const v = m.value == null ? 'No data' : (spread ? fmtAbout(m) : fmtM(m));
   return `<div class="fig ${cls}" role="button" tabindex="0" ${attr} title="${esc(isSimple() ? 'Click to see what this figure means' : (m.formula_text || ''))}">
-    <div class="fig-l">${gloss(label)} ${badges(m)}</div><div class="fig-v">${esc(v)}</div></div>`;
+    <div class="fig-l">${gloss(label)} ${m.metric_id === 'dto_contract_price' ? `${isSimple() ? '' : badges(m)}<span class="pill entered" title="Entered by the account manager, not estimated">entered</span>` : badges(m)}</div><div class="fig-v">${esc(v)}</div></div>`;
 }
 const srcBadge = r => (r.source === 'kam'
   ? `<span class="src kam">entered by account manager${r.entered_at ? `, ${esc(r.entered_at)}` : ''}</span>`

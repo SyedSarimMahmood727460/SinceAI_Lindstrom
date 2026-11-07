@@ -246,6 +246,21 @@ def test_live_with_no_sourced_claims_is_a_failure(monkeypatch):
 
 
 # --- fallback and API ---
+def test_prefer_snapshot_skips_live_research(monkeypatch):
+    """Snapshot chips and auto-open never start a live call, even with a key configured."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-fake")
+    monkeypatch.setenv("VR_AI", "on")
+    monkeypatch.setattr(llm, "get_client", lambda: pytest.fail("no client for a snapshot"))
+    rep = intel.research_company("Fazer Group", None, use_llm=True, prefer_snapshot=True)
+    assert rep.mode == "snapshot"
+    r = TestClient(app).post("/intel", json={"company": "Fazer Group", "prefer_snapshot": True})
+    assert r.status_code == 200 and r.json()["mode"] == "snapshot"
+    # without a snapshot, prefer_snapshot falls through to live research
+    fake = _live(monkeypatch, _submit(_raw_report()))
+    assert intel.research_company("Acme Oy", None, use_llm=True, prefer_snapshot=True).mode == "live"
+    assert len(fake.calls) == 1
+
+
 def test_fallback_to_snapshot_without_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("VR_AI", "on")

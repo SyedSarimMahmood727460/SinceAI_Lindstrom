@@ -78,6 +78,13 @@ def test_dto_net_with_contract(engine):
     assert q["contract_price"].range.base == pytest.approx(25000)
 
 
+def test_contract_price_is_an_entry_not_an_estimate(engine):
+    """The contract price is entered by the account manager: CALCULATED, High confidence."""
+    c = _dto(engine, {"values": {"contract_price_eur_per_year": 100000}})["contract_price"]
+    assert c.method_status.value == "CALCULATED" and c.confidence == "High"
+    assert "entered by account manager" in c.label
+
+
 def test_dto_baseline_formula_switch(engine):
     kg = engine.compute("CUST001")["washed_kg"].value
     local = _lines(_dto(engine, baseline="B_LOCAL"))

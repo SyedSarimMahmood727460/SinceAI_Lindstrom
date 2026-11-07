@@ -341,11 +341,18 @@ def _write_cache(slug: str, rep: IntelReport) -> None:
         pass
 
 
-def research_company(company: str, website: str | None, use_llm: bool) -> IntelReport:
+def research_company(company: str, website: str | None, use_llm: bool,
+                     prefer_snapshot: bool = False) -> IntelReport:
+    """Live research (cached), else the committed snapshot. With `prefer_snapshot` a committed
+    snapshot is returned straight away, without a model call (snapshot chips, auto-open)."""
     company = company.strip()
     slug = slugify(company)
     if not slug:
         raise IntelUnavailable("Enter a company name.")
+    if prefer_snapshot:
+        snapshot = load_snapshot(slug)
+        if snapshot is not None:
+            return snapshot
     reason = "no Anthropic API key is configured (or AI is switched off)"
     if use_llm:
         cached = _read_cache(slug)

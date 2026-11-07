@@ -41,7 +41,7 @@ let R = null, siteReview = null, MODULES = [], ACCOUNTS = [], INTERNAL = [], ASS
 // State for the DIY, growth, intelligence and fit pages (passed to the components as ctx.ext).
 const GROWTH_SENT = {};  // account -> growth inputs last saved in this session (kept when review.growth is null)
 const EXT = {
-  spec: {}, catalogue: null, fit: undefined,
+  spec: {}, catalogue: null, fit: undefined, storedGrowth: {},
   intel: {company: 'Fazer Group', website: '', report: null, error: '', loading: false, snapshots: [], auto: false},
   growthStored: () => growthStored(),
 };
@@ -86,6 +86,9 @@ async function load() {
     if (S.site && !R.sites.some(s => s.node_id === S.site)) S.site = null;
     render();
     if (S.site) loadSite();
+    if (!EXT.storedGrowth[S.account]) {  // growth form prefill, also a lone stored expansion price
+      fetchStoredGrowth().then(g => { if (g && seq === reqSeq && S.view === 'growth') renderPage(); });
+    }
   } catch (e) {
     if (seq === reqSeq) toast(`Could not load the review (${e.message})`, true);
   } finally {
@@ -261,13 +264,15 @@ function ensurePageData(view) {
     getJSON('/intel/snapshots').then(list => {
       EXT.intel.snapshots = list || [];
       const pre = EXT.intel.snapshots.find(s => s.company === 'Fazer Group') || EXT.intel.snapshots[0];
-      if (pre && !EXT.intel.report && !EXT.intel.loading) runIntel(pre.company, ''); else rerender();
+      if (pre && !EXT.intel.report && !EXT.intel.loading) runIntel(pre.company, '', true); else rerender();
     }).catch(e => { console.warn('snapshots unavailable', e); rerender(); });
   }
 }
 
 let intelSeq = 0;
-async function runIntel(company, website) {
+/** `preferSnapshot`: snapshot chips and the auto-open use the committed snapshot (no live call);
+ * only the Research button may start live research. */
+async function runIntel(company, website, preferSnapshot = false) {
   company = (company || '').trim(); website = (website || '').trim();
   const I = EXT.intel;
   I.company = company; I.website = website;
@@ -276,7 +281,7 @@ async function runIntel(company, website) {
   I.loading = true; I.error = ''; renderPage();
   try {
     const rep = await (await api('/intel', {method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({company, website: website || null})})).json();
+      body: JSON.stringify({company, website: website || null, prefer_snapshot: !!preferSnapshot})})).json();
     if (seq !== intelSeq) return;
     I.report = rep;
   } catch (e) {
@@ -289,12 +294,23 @@ async function runIntel(company, website) {
   }
 }
 
+const AMBIGUOUS = 'Use digits only, e.g. 120000 or 2.5';
 /** UI-side number parsing: decimal comma → dot, spaces dropped, blank → undefined (= use the default).
+ * Thousands-separator forms ("120,000", "1.234,5") are ambiguous: {bad: message}, shown inline.
  * Anything else that is not a plain number is sent as text so the API answers with its 422 message. */
 function normNum(raw) {
-  const s = String(raw == null ? '' : raw).replace(/[\s  ]/g, '').replace(',', '.');
-  if (s === '') return undefined;
+  const t = String(raw == null ? '' : raw).replace(/[\s  ]/g, '');
+  if (t === '') return undefined;
+  const commas = (t.match(/,/g) || []).length, dots = (t.match(/\./g) || []).length;
+  if ((commas && dots) || commas > 1 || dots > 1 || /^[-+]?[1-9]\d{0,2},\d{3}$/.test(t)) return {bad: AMBIGUOUS};
+  const s = t.replace(',', '.');
   return /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(s) ? Number(s) : s;
+}
+/** normNum for a form field; an ambiguous number stops the save with an inline message. */
+function fieldNum(el, field) {
+  const v = el ? normNum(el.value) : undefined;
+  if (v && typeof v === 'object') throw {field, msg: v.bad};
+  return v;
 }
 
 /** The do-it-yourself inputs as stored (KAM-entered keys only), rebuilt from review.dto.inputs. */
@@ -309,11 +325,26 @@ function diyStored() {
   return out;
 }
 
-/** The growth inputs as stored: from review.growth, or what this session last saved. */
+/** The growth inputs as stored (GET /inputs?include=growth, also a lone expansion price),
+ * else review.growth, else what this session last saved. */
 function growthStored() {
+  const st = EXT.storedGrowth[S.account];
+  if (st) {
+    const dates = Object.values(st.entered_at || {}).sort();
+    return {...st, entered_at: dates.length ? dates[dates.length - 1] : null};
+  }
   const g = R && R.growth && R.growth.inputs;
   if (g) return g;
   return GROWTH_SENT[S.account] || null;
+}
+/** Fetch the account's stored growth inputs (cached per account until the next save). */
+async function fetchStoredGrowth(account = S.account) {
+  if (EXT.storedGrowth[account]) return EXT.storedGrowth[account];
+  try {
+    const r = await getJSON(`/accounts/${encodeURIComponent(account)}/inputs?include=growth`);
+    EXT.storedGrowth[account] = r.growth;
+    return r.growth;
+  } catch (e) { console.warn('stored growth inputs unavailable', e); return null; }
 }
 function growthBody(g) {
   const out = {};
@@ -326,7 +357,7 @@ function growthBody(g) {
 function diyFromForm(form) {
   const spec = EXT.spec, body = {};
   ((R.dto && R.dto.inputs) || []).forEach(r => {
-    const get = part => { const el = form.querySelector(`[data-in="${CSS.escape(r.key)}"][data-part="${part}"]`); return el ? normNum(el.value) : undefined; };
+    const get = part => fieldNum(form.querySelector(`[data-in="${CSS.escape(r.key)}"][data-part="${part}"]`), part === 'value' ? r.key : `${r.key}_${part}`);
     const v = get('value');
     if (v !== undefined) {
       const def = spec[r.key] ? spec[r.key].default : undefined;
@@ -342,7 +373,7 @@ function diyFromForm(form) {
 function growthFromForm(form) {
   const g = {};
   ['extra_sites', 'extra_wearers', 'expansion_price_eur_per_site_year'].forEach(k => {
-    const el = form.querySelector(`[data-g="${k}"]`); const v = el ? normNum(el.value) : undefined;
+    const v = fieldNum(form.querySelector(`[data-g="${k}"]`), k);
     if (v !== undefined && v !== 0) g[k] = v;
   });
   const lines = [...form.querySelectorAll('[data-gline]:checked')].map(el => el.dataset.gline);
@@ -387,17 +418,31 @@ async function saveInputs(body, form, done) {
   const g = {};
   ['extra_sites', 'extra_wearers', 'extra_service_lines', 'expansion_price_eur_per_site_year'].forEach(k => { if (k in body) g[k] = body[k]; });
   GROWTH_SENT[S.account] = Object.keys(g).length ? g : null;
+  delete EXT.storedGrowth[S.account];
   toast(done);
   await load();
 }
 
-function onSubmit(e) {
+async function onSubmit(e) {
   const form = e.target.closest('form[data-form]'); if (!form) return;
   e.preventDefault();
   const kind = form.dataset.form;
-  if (kind === 'diy') saveInputs({...diyFromForm(form), ...growthBody(growthStored())}, form, 'Saved: the comparison uses your numbers');
-  else if (kind === 'growth') saveInputs({...diyStored(), ...growthFromForm(form)}, form, 'Saved: growth opportunity sized');
-  else if (kind === 'intel') runIntel($('intelCompany').value, $('intelWebsite').value);
+  if (kind === 'intel') { runIntel($('intelCompany').value, $('intelWebsite').value); return; }
+  let part;
+  try { part = kind === 'diy' ? diyFromForm(form) : growthFromForm(form); } catch (err) {
+    if (err && err.field) { showFormError(form, `${err.field}: ${err.msg}`); return; }
+    throw err;
+  }
+  if (kind === 'diy') {
+    await fetchStoredGrowth();
+    saveInputs({...part, ...growthBody(growthStored())}, form, 'Saved: the comparison uses your numbers');
+  } else if (kind === 'growth') saveInputs({...diyStored(), ...part}, form, 'Saved: growth opportunity sized');
+}
+
+async function resetDiy(form) {
+  if (!window.confirm('Reset all do-it-yourself inputs to the defaults? Values the account manager entered (including the contract price) are removed; the growth inputs are kept.')) return;
+  await fetchStoredGrowth();
+  saveInputs(growthBody(growthStored()), form, 'Reset: the comparison uses the defaults');
 }
 
 /** Placeholders of low/high follow the value field: the default range, or "same as value" once changed. */
@@ -654,9 +699,9 @@ document.addEventListener('click', e => {
   if (d.copy != null) { const c = R && R.story[+d.copy]; if (c) copyText(c.what_to_say); }
   else if (d.copyGrowth != null) { if (R && R.growth && R.growth.narrative_line) copyText(R.growth.narrative_line, 'Line copied'); }
   else if (d.local) explainLocal(d.local);
-  else if (d.action === 'diy-reset') saveInputs(growthBody(growthStored()), t.closest('form'), 'Reset: the comparison uses the defaults');
+  else if (d.action === 'diy-reset') resetDiy(t.closest('form'));
   else if (d.action === 'growth-clear') saveInputs(diyStored(), t.closest('form'), 'Growth inputs cleared');
-  else if (d.intelSnap) runIntel(d.intelSnap, '');
+  else if (d.intelSnap) runIntel(d.intelSnap, '', true);
   else if (d.detail != null) goDetail(d.detail);
   else if (d.modeSet) setMode(d.modeSet);
   else if (d.fmt) exportReview(d.fmt);

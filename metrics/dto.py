@@ -178,8 +178,11 @@ def compute_dto(engine, account_id: str, period: str, product: str | None,
                        "sum of the do-it-yourself cost lines marked in_total (extra "
                        "replacements are shown but not added)", all_facts)
     contract_r = None if price is None else result(
-        "contract_price", "Lindström contract price", "EUR", contract, [],
-        f"contract price per year (entered by the account manager) {m12}", [])
+        "contract_price", "Lindström contract price (entered by account manager)", "EUR",
+        contract, [], f"contract price per year (entered by the account manager) {m12}", [])
+    if contract_r is not None:  # an account-manager entry, not an estimate
+        contract_r = contract_r.model_copy(update={"method_status": MethodStatus.CALCULATED,
+                                                   "confidence": "High"})
     net_r = None if price is None else result(
         "net", "Do-it-yourself cost minus Lindström contract price", "EUR", net, all_ids,
         "do-it-yourself total − contract price", all_facts)

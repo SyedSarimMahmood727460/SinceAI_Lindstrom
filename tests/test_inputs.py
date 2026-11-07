@@ -142,6 +142,23 @@ def test_get_inputs_defaults(client, store):
     assert client.get("/accounts/NOPE/inputs").status_code == 404
 
 
+def test_get_inputs_include_growth(client, store):
+    """include=growth also returns the stored growth inputs, even a lone expansion price that
+    sizes nothing (so a form can send the whole stored set back)."""
+    r = client.get("/accounts/CUST001/inputs", params={"include": "growth"})
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["inputs"]) == 9
+    assert body["growth"] == {"extra_sites": None, "extra_wearers": None, "extra_service_lines": [],
+                              "expansion_price_eur_per_site_year": None, "entered_at": {}}
+    assert client.put("/accounts/CUST001/inputs", json={
+        "labour_eur_per_h": 40, "expansion_price_eur_per_site_year": 5000}).status_code == 200
+    g = client.get("/accounts/CUST001/inputs", params={"include": "growth"}).json()["growth"]
+    assert g["expansion_price_eur_per_site_year"] == 5000 and g["extra_sites"] is None
+    assert set(g["entered_at"]) == {"expansion_price_eur_per_site_year"}
+    assert client.get("/accounts/CUST001/review").json()["growth"] is None  # nothing to size
+
+
 def test_put_inputs_422(client, store):
     r = client.put("/accounts/CUST001/inputs", json={"labour_eur_per_h": "2,5"})
     assert r.status_code == 422

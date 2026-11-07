@@ -18,7 +18,7 @@ from api.review_model import ReviewParams
 from config.loader import CONFIG_DIR, load_assumptions, load_yaml
 from metrics.engine import Engine
 from model.contracts import ViewSpec
-from model.inputs_store import effective_inputs, load_inputs, save_inputs
+from model.inputs_store import effective_inputs, load_inputs, save_inputs, stored_growth
 from model.load import load_sources
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -112,13 +112,19 @@ def _inputs_spec() -> dict:
 
 
 @app.get("/accounts/{account_id}/inputs")
-def get_inputs(account_id: str):
-    """Effective service vs do-it-yourself inputs: defaults unless the KAM entered a value."""
+def get_inputs(account_id: str, include: str | None = None):
+    """Effective service vs do-it-yourself inputs: defaults unless the KAM entered a value.
+    `include=growth` returns {"inputs": [...], "growth": {...stored growth inputs}} so a form
+    can send the whole stored set back (PUT replaces it)."""
     with state.lock:
         if not _account_exists(account_id):
             raise HTTPException(404, f"unknown account: {account_id}")
     spec = _inputs_spec()
-    return effective_inputs(load_inputs(account_id, spec), spec)
+    stored = load_inputs(account_id, spec)
+    rows = effective_inputs(stored, spec)
+    if include == "growth":
+        return {"inputs": rows, "growth": stored_growth(stored)}
+    return rows
 
 
 @app.put("/accounts/{account_id}/inputs")
@@ -158,6 +164,8 @@ def intent(req: IntentRequest):
 class IntelRequest(BaseModel):
     company: str = Field(max_length=200)
     website: str | None = Field(default=None, max_length=300)
+    # snapshot chips / auto-open: use the committed snapshot when there is one (no model call)
+    prefer_snapshot: bool = False
 
     @field_validator("website")
     @classmethod
@@ -179,7 +187,8 @@ def intel(req: IntelRequest):
         raise HTTPException(422, "company: enter a company name")
     try:
         return research_company(req.company, (req.website or "").strip() or None,
-                                llm.use_llm()).model_dump(mode="json")
+                                llm.use_llm(), prefer_snapshot=req.prefer_snapshot
+                                ).model_dump(mode="json")
     except IntelUnavailable as e:
         raise HTTPException(503, str(e))
 
