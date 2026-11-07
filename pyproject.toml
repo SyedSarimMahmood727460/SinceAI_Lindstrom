@@ -5,7 +5,7 @@ description = "Lindstrom customer value and sustainability review prototype"
 requires-python = ">=3.12"
 dependencies = [
     "pandas", "openpyxl", "duckdb", "pydantic>=2", "PyYAML", "fastapi",
-    "uvicorn", "python-pptx", "matplotlib", "anthropic", "httpx",
+    "uvicorn", "python-pptx", "matplotlib", "anthropic>=2.6,<3", "httpx",
     "reportlab",
 ]
 

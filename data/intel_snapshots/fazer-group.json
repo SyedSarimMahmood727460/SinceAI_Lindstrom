@@ -65,7 +65,7 @@
     ],
     "trends": [
       {
-        "text": "Cocoa prices fell below USD 4,000 per tonne in February 2026 for the first time since November 2023, after peaking at about USD 10,750 per tonne in January 2025.",
+        "text": "Cocoa prices fell below USD 4,000 per tonne in February 2026, for the first time since November 2023, after record highs.",
         "source_url": "https://www.confectionerynews.com/Article/2026/02/13/cocoa-prices-collapse-following-record-highs/",
         "source_date": "2026-02-13"
       },
@@ -75,13 +75,8 @@
         "source_date": "2025-07-28"
       },
       {
-        "text": "In-store baking is growing: Fazer's Shop-in-Shop bakery business reached record net sales in 2025 and now contributes almost a third of the Finnish bakery business' net sales, while demand for packed fresh bread softened.",
-        "source_url": "https://news.cision.com/fazer-group/r/fazer-group-january---december-2025--record-high-net-sales-and-comparable-operating-result,c4311468",
-        "source_date": "2026-02-23"
-      },
-      {
-        "text": "The plant-based drinks market remained challenging: Fazer's Lifestyle Foods sales fell 12.8% in 2025, mainly on lower B2B plant-based sales, while demand for Fazer Aito Oat Drink Barista grew strongly in Finland.",
-        "source_url": "https://www.just-food.com/news/fazer-looks-to-ma-after-record-2025-sales/",
+        "text": "Fazer Lifestyle Foods' net sales fell to EUR 190.5 million in 2025 (2024: EUR 218.5 million), primarily due to lower B2B sales in Fazer's plant-based business; Fazer describes the plant-based drinks market as continuing to be challenging amid intense competition.",
+        "source_url": "https://mb.cision.com/Main/964/4311222/3946464.pdf",
         "source_date": "2026-02-23"
       }
     ],
@@ -98,7 +93,7 @@
       {
         "offer_id": "mats",
         "offer_name": "Mats",
-        "why": "Entrance and safety mats support hygiene and slip prevention at production sites, in line with Fazer's focus on reducing lost-time accidents and recordable incidents.",
+        "why": "Entrance and safety mats support hygiene and slip prevention at production sites, in line with Fazer's focus on lowering its lost-time accident frequency (LTAF) and recordable incidents.",
         "based_on": [
           "https://mb.cision.com/Main/964/4311222/3946464.pdf"
         ]
@@ -115,7 +110,7 @@
     "conversation_starters": [
       "Your Lahti chocolate factory is due to start in 2028 — how are you planning workwear, hygiene and changing-room services for the new site?",
       "Scope 3 is above your 2020 baseline and supplier data is a stated obstacle — would supplier-specific service footprint data (water, energy, CO₂e) help your reporting?",
-      "You cut lost-time accidents from 4.0 to 2.7 in 2025 — which site safety measures, such as mats or workwear visibility, would you like to strengthen next?",
+      "You reduced your lost-time accident frequency (LTAF) from 4.0 to 2.7 in 2025 — which site safety measures, such as mats or workwear visibility, would you like to strengthen next?",
       "With the Baltic bakeries consolidated in Ogre, Latvia, is now a good time to harmonise textile and hygiene services across Finland, Sweden and the Baltics?"
     ]
   },

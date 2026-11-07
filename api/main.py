@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from api.build import _narrate, build_review, dq_warning_rows
 from api.review_model import ReviewParams
@@ -158,6 +158,15 @@ def intent(req: IntentRequest):
 class IntelRequest(BaseModel):
     company: str = Field(max_length=200)
     website: str | None = Field(default=None, max_length=300)
+
+    @field_validator("website")
+    @classmethod
+    def _website(cls, v: str | None) -> str | None:
+        from ai.intel import is_http_url
+        v = (v or "").strip()
+        if v and not is_http_url(v):
+            raise ValueError("website: enter an http(s) address such as https://example.com")
+        return v or None
 
 
 @app.post("/intel")

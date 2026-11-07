@@ -15,6 +15,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, Field
 
@@ -30,9 +31,11 @@ DISCLAIMER = ("AI-generated from public sources — verify before use. "
               "Example public company; no relationship with Lindström is implied.")
 SUBMIT_TOOL = "submit_report"
 # The Anthropic server tool is plain JSON, so it works with any SDK version.
-WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search", "max_uses": 8}
+WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search", "max_uses": 5}
 CLAIM_SECTIONS = ("direction", "sustainability", "trends")
 _HTTP = re.compile(r"^https?://[^\s/]+\.[^\s]+$", re.IGNORECASE)
+_BAD_URL_CHARS = re.compile(r"[\s\"<>'`]")
+_DATE = re.compile(r"^\d{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?)?$")
 
 
 class Claim(BaseModel):
@@ -182,47 +185,82 @@ def _user_prompt(company: str, website: str | None) -> str:
     return f"Company: {company}" + (f"\nWebsite: {website}" if website else "")
 
 
-def _is_http(url) -> bool:
-    return isinstance(url, str) and bool(_HTTP.match(url.strip()))
+def is_http_url(url) -> bool:
+    """An http(s) URL with a dotted host and none of the characters that could break out of an
+    HTML attribute or a Markdown link."""
+    return isinstance(url, str) and not _BAD_URL_CHARS.search(url) and bool(_HTTP.match(url))
+
+
+def normalise_url(url: str) -> str:
+    """Comparison key: lower-case scheme and host, no fragment, no trailing slash."""
+    parts = urlsplit(url.strip())
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"),
+                       parts.query, ""))
 
 
 def _str(v) -> str:
     return v.strip() if isinstance(v, str) else ""
 
 
-def _sanitise(raw: dict, company: str, website: str | None,
-              catalogue: dict[str, str]) -> IntelReport:
-    """Keep only sourced claims and catalogue offers; the disclaimer is always ours."""
+def _searched_urls(responses: list) -> set[str]:
+    """Every URL a web_search_tool_result block returned, across all collected responses."""
+    urls: set[str] = set()
+    for resp in responses:
+        for b in getattr(resp, "content", None) or []:
+            if getattr(b, "type", "") != "web_search_tool_result":
+                continue
+            results = getattr(b, "content", None)
+            for r in results if isinstance(results, list) else []:
+                url = r.get("url") if isinstance(r, dict) else getattr(r, "url", None)
+                if isinstance(url, str):
+                    urls.add(normalise_url(url))
+    return urls
+
+
+def _sanitise(raw: dict, company: str, website: str | None, catalogue: dict[str, str],
+              searched: set[str]) -> IntelReport:
+    """Keep only claims whose source the web search actually returned, with a date, and catalogue
+    offers backed by such a source; the disclaimer is always ours."""
+    def found(url) -> bool:
+        return is_http_url(url) and normalise_url(url) in searched
+
     sections: dict = {}
     for name in CLAIM_SECTIONS:
         items = raw.get(name) if isinstance(raw.get(name), list) else []
         sections[name] = [Claim(text=_str(c.get("text")), source_url=c["source_url"].strip(),
                                 source_date=_str(c.get("source_date")))
                           for c in items if isinstance(c, dict) and _str(c.get("text"))
-                          and _is_http(c.get("source_url"))]
+                          and found(c.get("source_url"))
+                          and _DATE.match(_str(c.get("source_date")))]
     if not any(sections[n] for n in CLAIM_SECTIONS):
         raise ValueError("no sourced claims in the report")
-    helps = raw.get("how_lindstrom_helps") if isinstance(raw.get("how_lindstrom_helps"), list) \
-        else []
-    sections["how_lindstrom_helps"] = [
-        HelpItem(offer_id=h["offer_id"], offer_name=catalogue[h["offer_id"]], why=_str(h.get("why")),
-                 based_on=[u.strip() for u in h.get("based_on") or [] if _is_http(u)])
-        for h in helps if isinstance(h, dict) and h.get("offer_id") in catalogue
-        and _str(h.get("why"))]
+    helps = raw.get("how_lindstrom_helps") if isinstance(raw.get("how_lindstrom_helps"), list)         else []
+    sections["how_lindstrom_helps"] = []
+    for h in helps:
+        if not (isinstance(h, dict) and h.get("offer_id") in catalogue and _str(h.get("why"))):
+            continue
+        based_on = h.get("based_on") if isinstance(h.get("based_on"), list) else []
+        based_on = [u.strip() for u in based_on if found(u)]
+        if based_on:  # an offer mapping without a real source is dropped
+            sections["how_lindstrom_helps"].append(HelpItem(
+                offer_id=h["offer_id"], offer_name=catalogue[h["offer_id"]],
+                why=_str(h.get("why")), based_on=based_on))
     starters = raw.get("conversation_starters")
-    sections["conversation_starters"] = [_str(s) for s in starters or [] if _str(s)] \
-        if isinstance(starters, list) else []
+    sections["conversation_starters"] = [_str(s) for s in starters or [] if _str(s)]         if isinstance(starters, list) else []
 
     sources: dict[str, Source] = {}
     for s in raw.get("sources") if isinstance(raw.get("sources"), list) else []:
-        if isinstance(s, dict) and _is_http(s.get("url")):
+        if isinstance(s, dict) and found(s.get("url")):
             url = s["url"].strip()
-            sources.setdefault(url, Source(url=url, title=_str(s.get("title")) or url,
-                                           date=_str(s.get("date"))))
-    for name in CLAIM_SECTIONS:  # the sources list always covers every cited URL
-        for c in sections[name]:
-            sources.setdefault(c.source_url, Source(url=c.source_url, title=c.source_url,
-                                                    date=c.source_date))
+            sources.setdefault(normalise_url(url), Source(
+                url=url, title=_str(s.get("title")) or url, date=_str(s.get("date"))))
+    cited = [c for n in CLAIM_SECTIONS for c in sections[n]]
+    for c in cited:  # the sources list always covers every cited URL
+        sources.setdefault(normalise_url(c.source_url),
+                           Source(url=c.source_url, title=c.source_url, date=c.source_date))
+    for h in sections["how_lindstrom_helps"]:
+        for u in h.based_on:
+            sources.setdefault(normalise_url(u), Source(url=u, title=u, date=""))
     return IntelReport(company=company, website=website,
                        generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
                        mode="live", sections=IntelSections(**sections),
@@ -245,6 +283,7 @@ def _live(company: str, website: str | None, record: dict) -> IntelReport:
     deadline = time.monotonic() + TIMEOUT_S
     client = llm.get_client()
     nudged = False
+    responses: list = []
     for _ in range(MAX_TURNS):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -254,12 +293,13 @@ def _live(company: str, website: str | None, record: dict) -> IntelReport:
         if nudged:
             kw["tool_choice"] = {"type": "tool", "name": SUBMIT_TOOL}
         resp = client.messages.create(**kw)
+        responses.append(resp)
         stop = getattr(resp, "stop_reason", None)
         record["turns"].append({"stop_reason": stop})
         raw = _submitted(resp)
         if raw is not None:
             record["output"] = raw
-            return _sanitise(raw, company, website, catalogue)
+            return _sanitise(raw, company, website, catalogue, _searched_urls(responses))
         messages = [*messages, {"role": "assistant", "content": resp.content}]
         if stop == "pause_turn":  # the server tool loop paused: let the model continue
             continue

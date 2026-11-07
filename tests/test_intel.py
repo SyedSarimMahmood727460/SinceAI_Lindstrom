@@ -3,6 +3,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from anthropic.types import WebSearchResultBlock, WebSearchToolResultBlock
 from fastapi.testclient import TestClient
 
 from ai import intel, llm
@@ -32,12 +33,23 @@ class FakeClient:
         return out
 
 
-def _submit(report: dict):
+# What the (fake) web search returned; scheme/host case and a trailing slash differ on purpose.
+SEARCHED = ["HTTPS://Example.com/news/", "https://acme.example/report.pdf"]
+
+
+def _search_result(urls=SEARCHED):
+    """A real SDK web_search_tool_result block (anthropic >= 2.6)."""
+    return WebSearchToolResultBlock(type="web_search_tool_result", tool_use_id="srv1", content=[
+        WebSearchResultBlock(type="web_search_result", url=u, title=u, encrypted_content="x",
+                             page_age=None) for u in urls])
+
+
+def _submit(report: dict, urls=SEARCHED):
     """A response whose final answer comes through the submit_report tool (after a web search)."""
     return SimpleNamespace(stop_reason="tool_use", content=[
         SimpleNamespace(type="server_tool_use", id="srv1", name="web_search",
                         input={"query": "Acme Oy strategy"}),
-        SimpleNamespace(type="web_search_tool_result", tool_use_id="srv1", content=[]),
+        _search_result(urls),
         SimpleNamespace(type="text", text="Submitting the report."),
         SimpleNamespace(type="tool_use", id="tu1", name=intel.SUBMIT_TOOL, input=report)])
 
@@ -83,7 +95,9 @@ def test_snapshot_valid():
     source_urls = {s.url for s in rep.sources}
     assert {c.source_url for c in claims} <= source_urls  # every cited source is listed
     assert len(rep.sources) >= 3
-    assert all(s.url.startswith("https://") and s.title and s.date for s in rep.sources)
+    assert all(intel.is_http_url(s.url) and s.title and s.date for s in rep.sources)
+    assert all(intel._DATE.match(c.source_date) for c in claims)
+    assert all(h.based_on for h in rep.sections.how_lindstrom_helps)
     assert 3 <= len(rep.sections.how_lindstrom_helps) <= 5
     assert {h.offer_id for h in rep.sections.how_lindstrom_helps} <= CATALOGUE
     assert all(set(h.based_on) <= source_urls for h in rep.sections.how_lindstrom_helps)
@@ -119,10 +133,64 @@ def test_live_path_drops_unsourced_claims(monkeypatch):
     assert kw["model"] == llm.MODEL == "claude-sonnet-5-5"
     assert intel.WEB_SEARCH_TOOL in kw["tools"]
     assert intel.WEB_SEARCH_TOOL == {"type": "web_search_20250305", "name": "web_search",
-                                     "max_uses": 8}
+                                     "max_uses": 5}
     assert any(t.get("name") == intel.SUBMIT_TOOL and "input_schema" in t for t in kw["tools"])
     assert 0 < kw["timeout"] <= intel.TIMEOUT_S == 60
     assert "Acme Oy" in json.dumps(kw["messages"])
+
+
+def test_live_path_drops_urls_the_search_never_returned(monkeypatch):
+    invented = "https://example.com/invented-press-release"
+    raw = _raw_report(
+        direction=[_claim("Real.", url="https://example.com/news"),
+                   _claim("Invented.", url=invented)],
+        how_lindstrom_helps=[{"offer_id": "workwear", "why": "w",
+                              "based_on": [invented, "https://acme.example/report.pdf"]}],
+        sources=[{"url": invented, "title": "made up", "date": "2026-01-01"}])
+    _live(monkeypatch, _submit(raw))
+    rep = intel.research_company("Acme Oy", None, use_llm=True)
+    assert [c.text for c in rep.sections.direction] == ["Real."]
+    assert rep.sections.how_lindstrom_helps[0].based_on == ["https://acme.example/report.pdf"]
+    assert invented not in {s.url for s in rep.sources}
+
+
+def test_searched_urls_collected_across_responses(monkeypatch):
+    """A URL found in an earlier (paused) turn still counts as searched."""
+    paused = SimpleNamespace(stop_reason="pause_turn",
+                             content=[_search_result(["https://first.example/a"])])
+    raw = _raw_report(direction=[_claim("From turn one.", url="https://first.example/a")])
+    _live(monkeypatch, paused, _submit(raw))
+    rep = intel.research_company("Acme Oy", None, use_llm=True)
+    assert [c.text for c in rep.sections.direction] == ["From turn one."]
+
+
+def test_live_path_drops_undated_and_unsafe(monkeypatch):
+    unsafe = 'https://example.com/news"onmouseover="x'
+    raw = _raw_report(
+        direction=[_claim("Day.", date="2026-01-15"), _claim("Month.", date="2026-01"),
+                   _claim("Year.", date="2026"), _claim("No date.", date=""),
+                   _claim("Words.", date="January 2026"), _claim("Bad month.", date="2026-13")],
+        sustainability=[_claim("Unsafe.", url=unsafe),
+                        _claim("Space.", url="https://example.com/news x")],
+        how_lindstrom_helps=[{"offer_id": "workwear", "why": "w", "based_on": [unsafe]},
+                             {"offer_id": "mats", "why": "m", "based_on": []},
+                             {"offer_id": "washroom", "why": "ok",
+                              "based_on": ["https://example.com/news"]}],
+        sources=[{"url": "https://example.com/news<script>", "title": "t", "date": "2026"}])
+    _live(monkeypatch, _submit(raw, urls=[*SEARCHED, unsafe]))
+    rep = intel.research_company("Acme Oy", None, use_llm=True)
+    assert [c.text for c in rep.sections.direction] == ["Day.", "Month.", "Year."]
+    assert rep.sections.sustainability == []
+    assert [h.offer_id for h in rep.sections.how_lindstrom_helps] == ["washroom"]
+    assert all(intel.is_http_url(s.url) for s in rep.sources)
+
+
+def test_is_http_url():
+    assert intel.is_http_url("https://www.fazergroup.com/a?b=1")
+    for bad in ("http://x", "javascript:alert(1)", "https://a.example/<x>", "https://a.example/'",
+                "https://a.example/`", 'https://a.example/"', "https://a.example/ x",
+                " https://a.example/", "ftp://a.example/"):
+        assert not intel.is_http_url(bad), bad
 
 
 def test_live_path_drops_unknown_offer(monkeypatch):
@@ -202,6 +270,18 @@ def test_unknown_company_without_key_503(monkeypatch):
 
 def test_intel_rejects_blank_company():
     assert TestClient(app).post("/intel", json={"company": "  "}).status_code == 422
+
+
+@pytest.mark.parametrize("website", ["fazer.com", "javascript:alert(1)",
+                                     "https://fazer.com/<script>", "https://fazer.com/a b"])
+def test_intel_rejects_bad_website(website):
+    r = TestClient(app).post("/intel", json={"company": "Fazer Group", "website": website})
+    assert r.status_code == 422 and "http(s)" in r.text
+
+
+def test_intel_accepts_blank_website():
+    r = TestClient(app).post("/intel", json={"company": "Fazer Group", "website": " "})
+    assert r.status_code == 200 and r.json()["mode"] == "snapshot"
 
 
 def test_intel_snapshots_endpoint():
