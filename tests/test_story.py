@@ -184,3 +184,22 @@ def test_biggest_facts_absent_for_r4(con):
     stub = r.model_copy(update={"observations": [r4]})
     card = next(c for c in build_story(stub) if c["id"] == "biggest_improvement")
     assert card["facts"] is None and card["statement"] == r4.finding
+
+
+def test_story_what_to_say_true_everywhere(con):
+    """Coaching lines must hold on every surface (deck notes, workbook, screen): no 'on the page'."""
+    r = build_review(con, ReviewParams(account_id="CUST001"))
+    for c in r.story:
+        assert "on the page" not in c["what_to_say"]
+    say = next(c for c in r.story if c["id"] == "vs_diy")["what_to_say"]
+    assert say.startswith("The comparison uses your own prices where you've given them")
+
+
+def test_biggest_statement_matches_tiles(con):
+    from export.format import fmt_compact
+    r = build_review(con, ReviewParams(account_id="CUST001"))
+    c = next(c for c in r.story if c["id"] == "biggest_improvement")
+    f = c["facts"]
+    assert "washes 67 kg per wearer" in c["statement"] and "typically about 49 kg" in c["statement"]
+    assert fmt_compact(f["value"], f["unit"]) == "67 kg per wearer"
+    assert fmt_compact(f["typical"], f["unit"]) == "49 kg per wearer"

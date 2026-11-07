@@ -2,6 +2,8 @@
 the story cards and tests)."""
 from __future__ import annotations
 
+import math
+
 
 def _scale(value: float, unit: str) -> tuple[float, str, int, float]:
     """Return (scaled value, display unit, decimals, divisor) chosen from the headline `value`."""
@@ -55,6 +57,11 @@ MINUS = "−"  # U+2212
 NO_VALUE = "—"
 
 
+def compact_num(a: float) -> str:
+    """A plain compact count: 0 dp from 10 up (67, 230, 1,152), else 1 dp without a trailing zero."""
+    return f"{a:,.0f}" if round(a, 1) >= 10 else f"{a:,.1f}".rstrip("0").rstrip(".")
+
+
 def _compact_abs(a: float, unit: str) -> str | None:
     """Compact text for a non-negative value; None when the unit has no compact rule."""
     if unit == "EUR":
@@ -76,13 +83,17 @@ def _compact_abs(a: float, unit: str) -> str | None:
         return f"{a / 1000:,.0f} MWh" if round(a) >= 1000 else f"{a:,.0f} kWh"
     if unit == "ratio":
         return f"{a * 100:,.1f}%"
+    if unit == "kg/wearer":
+        return f"{compact_num(a)} kg per wearer"
+    if unit.startswith("per 100"):
+        return f"{compact_num(a)} {unit}"
     return None
 
 
 def fmt_compact(value: float | None, unit: str) -> str:
     """Compact meeting style: €1.96M, €758k, €8,250, 1,407 m³, 255 t CO₂e, 1,152 h, 172 MWh, 98.3%.
-    Negative values carry a true minus sign (−€297k); None is a dash."""
-    if value is None:
+    Negative values carry a true minus sign (−€297k); None, nan and inf are a dash."""
+    if value is None or not math.isfinite(value):
         return NO_VALUE
     text = _compact_abs(abs(value), unit)
     if text is None:

@@ -186,8 +186,9 @@ def _fit_row_h(n_rows, top, bottom, preferred):
 
 # ---------------------------------------------------------------- the meeting steps (design §7)
 # Layout bands (inches): lead message 1.12–1.95 · hero tiles 2.0–3.5 · supporting content
-# 3.65–6.1 · "What to say" strip 6.2–6.9 · footer from 6.98.
-LEAD_Y, TILE_Y, TILE_H, BODY_Y, BODY_END, SAY_Y, SAY_H = 1.12, 2.0, 1.5, 3.65, 6.1, 6.2, 0.7
+# 3.65–6.85 · footer from 6.98. The account manager's "What to say" goes to the speaker notes
+# only: the deck is customer-facing, coaching never prints on a slide.
+LEAD_Y, TILE_Y, TILE_H, BODY_Y, BODY_END = 1.12, 2.0, 1.5, 3.65, 6.85
 
 
 def _lead(slide, text):
@@ -212,18 +213,8 @@ def _tiles(slide, tiles):
             _run(tf.add_paragraph(), clip(t["context"], 60), 11, False, GREY, italic=True)
 
 
-def _say(slide, text):
-    if not text:
-        return
-    _rect(slide, MARGIN, Inches(SAY_Y), CONTENT_W, Inches(SAY_H), LIGHT)
-    _, tf = _textbox(slide, MARGIN + Inches(0.1), Inches(SAY_Y + 0.05), CONTENT_W - Inches(0.2),
-                     Inches(SAY_H - 0.1), MSO_ANCHOR.MIDDLE)
-    _run(tf.paragraphs[0], "What to say: ", 12, True, RED)
-    _run(tf.paragraphs[0], clip(text, 220), 12)
-
-
 def _step_frame(prs, review, n, step, lead=True):
-    """Title, lead message, tiles and the What to say strip; returns (slide, top of the body band)."""
+    """Title, lead message and tiles; What to say goes to the notes. Returns (slide, top of the body band)."""
     slide = _new_slide(prs, step["title"], review, n)
     if lead:
         _lead(slide, step["message"])
@@ -231,7 +222,6 @@ def _step_frame(prs, review, n, step, lead=True):
     if step["tiles"]:
         _tiles(slide, step["tiles"])
         top = BODY_Y
-    _say(slide, step["what_to_say"])
     _notes(slide, step["what_to_say"])
     return slide, top
 
@@ -258,7 +248,7 @@ def _step2(prs, review, n, step):
            size=11, row_h=row_h, header_size=11)
     x, w = Inches(8.75), Inches(3.98)
     _, tf = _textbox(slide, x, Inches(top), w, Inches(0.35))
-    _run(tf.paragraphs[0], "Contract vs doing it yourself", 12, True, RED)
+    _run(tf.paragraphs[0], step["bars_title"], 12, True, RED)
     biggest = max(v for _, v, _ in step["bars"]) or 1
     y = top + 0.4
     for label, value, text in step["bars"]:
@@ -303,7 +293,7 @@ def _step4(prs, review, n, step):
 def _step5(prs, review, n, step):
     slide, top = _step_frame(prs, review, n, step, lead=False)
     _, tf = _textbox(slide, MARGIN, Inches(top), Inches(5.5), Inches(BODY_END - top))
-    _heading(tf, "For the review meeting", first=True)
+    _heading(tf, "Points we suggest discussing", first=True)
     pts = [clip(p, 120) for p in step["points"][:5]]
     _bullets(tf, pts or ["No discussion points for this filter."], 14, space=8, first=False)
     _, tf = _textbox(slide, Inches(6.4), Inches(top), Inches(6.35), Inches(0.4))

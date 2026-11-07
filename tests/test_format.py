@@ -13,6 +13,11 @@ VECTORS = [
     # round first, then promote the unit
     (1000000, "EUR", "€1.00M"), (9999.6, "EUR", "€10k"), (9960, "kgCO2e", "10 t CO₂e"),
     (999.7, "kgCO2e", "1.0 t CO₂e"), (999.6, "kWh", "1 MWh"), (-0.2, "EUR", "€0"),
+    # site figures (step 3 tiles, same text as the story statement)
+    (67.0175, "kg/wearer", "67 kg per wearer"), (48.81, "kg/wearer", "49 kg per wearer"),
+    (230.4, "per 100 wearers", "230 per 100 wearers"), (4.3, "per 100 wearers", "4.3 per 100 wearers"),
+    # non-finite values are a dash
+    (float("nan"), "EUR", "—"), (float("inf"), "kgCO2e", "—"), (float("-inf"), "h", "—"),
 ]
 
 

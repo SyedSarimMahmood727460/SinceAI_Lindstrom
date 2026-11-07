@@ -60,7 +60,7 @@ def build_xlsx(review, out_path: Path, audience: str = "kam") -> Path:
 
     # Meeting: one row per step of the guided meeting, in order (compact numbers)
     steps = meeting_steps(review)
-    ws = _sheet(wb, "Meeting", ["Step", "Message", "Figures", "What to say"],
+    ws = _sheet(wb, "Meeting", ["Step", "Message", "Figures", "What to say (account manager)"],
                 [[st["title"], st["message"], step_figures(st), st["what_to_say"]] for st in steps],
                 [26, 70, 70, 60], disc)
     ws.append([])

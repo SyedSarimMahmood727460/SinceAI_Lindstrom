@@ -12,7 +12,7 @@ import statistics
 from typing import Any
 
 from config.loader import load_yaml
-from export.format import _scale, fmt_compact, fmt_number
+from export.format import _scale, compact_num, fmt_compact, fmt_number
 
 ILLUSTRATIVE = "illustrative comparison"
 CARD_ORDER = ["value_delivered", "vs_diy", "biggest_improvement", "growth", "whats_next"]
@@ -139,19 +139,19 @@ def _vs_diy(review, k):
         statement += f" It also frees {_about(hrs)} of your staff's time."
     return {"id": "vs_diy", "title": "Service versus doing it yourself",
             "statement": statement, "relatable": None,
-            "what_to_say": "The inputs behind this comparison are shown on the page; "
-                           "check that they match your own prices.",
+            "what_to_say": "The comparison uses your own prices where you've given them, and typical "
+                           "prices elsewhere — tell us if any look off.",
             "detail_view": "vs_diy", "value_refs": refs}
 
 
 # Plain-language templates per site rule: (metric, text with {name} {v} {med}, closing line,
 # what to say). No z-scores or "peer" jargon reaches the customer.
 def _pct(x):
-    return f"{x:.0%}"
+    return fmt_compact(x, "ratio")
 
 
 def _num1(x):
-    return f"{x:,.0f}" if x >= 100 else f"{x:,.1f}".rstrip("0").rstrip(".")
+    return compact_num(x)  # the same figure as the export tiles (export.format.fmt_compact)
 
 
 SITE_STORY = {

@@ -226,20 +226,38 @@ def _step1(review, cards):
             "what_to_say": card.get("what_to_say", "")}
 
 
+def _net_tile(net) -> dict:
+    """The net (do-it-yourself total minus the contract) in plain words: a saving with Lindström,
+    or an extra cost when the headline is negative (then the figures are shown as positive)."""
+    saving = net.value >= 0
+    sign = 1 if saving else -1
+    r = net.range
+    rng = ""
+    if r is not None and r.low is not None and r.high is not None:
+        lo, hi = sorted((sign * r.low, sign * r.high))
+        a, b = fmt_compact(lo, net.unit), fmt_compact(hi, net.unit)
+        rng = "" if a == b else f"range {a} – {b}"
+    crosses = bool(rng) and min(r.low, r.high) < 0 < max(r.low, r.high)
+    return {"label": "Saving with Lindström" if saving else "Extra cost with Lindström",
+            "value": fmt_compact(sign * net.value, net.unit), "range": rng,
+            "context": "per year · depends on the assumptions" if crosses else "per year"}
+
+
 def _step2(review, cards):
     d = review.dto
     card = cards.get("vs_diy") or {}
     step = {"n": 2, "title": STEP_TITLES[2], "statement": card.get("statement", ""),
-            "what_to_say": card.get("what_to_say", ""), "tiles": [], "lines": [], "bars": [], "notes": []}
+            "what_to_say": card.get("what_to_say", ""), "tiles": [], "lines": [], "bars": [], "notes": [],
+            "bars_title": ""}
     if d is None or not _present(d.diy_total):
         return {**step, "message": "No do-it-yourself comparison for this filter"}
     net = d.net if _present(d.net) else None
     contract = d.contract_price if _present(d.contract_price) else None
     if net is not None:
-        word = "less" if net.value >= 0 else "more"
-        step["message"] = (f"About {fmt_compact(abs(net.value), net.unit)} {word} with Lindström "
-                           "than doing it yourself")
-        step["tiles"].append(_tile("Net: doing it yourself minus Lindström", net, "per year"))
+        from insights.story import signed_about  # the story's honest wording when the range crosses zero
+        text = signed_about(net, "less", "more", " with Lindström than doing it yourself")
+        step["message"] = text[0].upper() + text[1:]
+        step["tiles"].append(_net_tile(net))
     else:
         step["message"] = f"Doing it yourself would cost about {fmt_compact_value(d.diy_total)} a year"
     step["tiles"].append(_tile("Doing it yourself would cost", d.diy_total, "per year"))
@@ -254,6 +272,7 @@ def _step2(review, cards):
         step["lines"].append(["Lindström contract price", fmt_compact_value(contract), _bare_range(contract)])
         step["bars"].append(("Lindström contract", contract.value, fmt_compact_value(contract)))
     step["bars"].append(("Doing it yourself", d.diy_total.value, fmt_compact_value(d.diy_total)))
+    step["bars_title"] = "Contract vs doing it yourself" if contract is not None else "Doing it yourself, per year"
     if d.missing_lines:
         labels = {x.id: x.label for x in d.lines}
         step["notes"].append("Partial total: no data for "

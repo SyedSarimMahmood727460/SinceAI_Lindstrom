@@ -181,6 +181,8 @@ def _cover(review, st):
 
 
 # ---------------------------------------------------------------- the meeting steps (design §7)
+# Customer-facing: the account manager's "What to say" is never printed (it is in the deck notes
+# and the Excel Meeting sheet).
 
 def _tiles(tiles, st):
     """The hero row: 2–3 tiles with label, big compact number, range line and context line."""
@@ -202,16 +204,6 @@ def _tiles(tiles, st):
     return [tbl, Spacer(1, 4 * mm)]
 
 
-def _say(text, st):
-    if not text:
-        return []
-    box = Table([[Paragraph("<b>What to say:</b> " + escape(text), st["body"])]],
-                colWidths=[PAGE[0] - 2 * MARGIN])
-    box.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), LIGHT), ("LEFTPADDING", (0, 0), (-1, -1), 8),
-                             ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
-    return [Spacer(1, 4 * mm), KeepTogether([box])]
-
-
 def _step_head(review, st, step, message=True):
     out = _section(step["title"], st, step["message"] if message else None)
     return out + (_tiles(step["tiles"], st) if step["tiles"] else [])
@@ -222,7 +214,7 @@ def _step1(review, st, step):
     out.append(_p(step["statement"] or "No data for this filter", st["body"]))
     if step["relatable"]:
         out.append(_p(step["relatable"], st["italic"]))
-    return out + _say(step["what_to_say"], st)
+    return out
 
 
 def _bars(bars, st):
@@ -243,13 +235,13 @@ def _bars(bars, st):
 def _step2(review, st, step):
     out = _step_head(review, st, step)
     if not step["lines"]:
-        return out + [_p("No comparison for this filter", st["h2"])] + _say(step["what_to_say"], st)
+        return out + [_p("No comparison for this filter", st["h2"])]
     table = _table(step["lines"], [95, 30, 45], st, ["Per year", "Value", "Range (low – high)"])
-    side = [_p("Lindström contract vs doing it yourself", st["h2"]), _bars(step["bars"], st)]
+    side = [_p(step["bars_title"], st["h2"]), _bars(step["bars"], st)]
     side += [_p(t, st["small"]) for t in step["notes"]]
     t = Table([[table, side]], colWidths=[176 * mm, 91 * mm])
     t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
-    out += [t] + _say(step["what_to_say"], st)
+    out += [t]
     v = diy_view(review)
     if v and v["inputs"]:
         out.append(_p("The numbers behind this comparison", st["h2"]))
@@ -265,7 +257,7 @@ def _step3(review, st, step):
         for title, action in step["next"]:
             out.append(KeepTogether([_p(title, st["cellb"]),
                                      Paragraph(f"<b>Next step:</b> <i>{escape(action)}</i>", st["body"])]))
-    return out + _say(step["what_to_say"], st)
+    return out
 
 
 def _step4(review, st, step):
@@ -274,18 +266,18 @@ def _step4(review, st, step):
     out.append(Spacer(1, 2 * mm))
     out += _bullets(step["notes"] + ["All figures are estimates per year, scaled from your own current data; "
                                      "ranges run from low to high."], st, "small")
-    return out + _say(step["what_to_say"], st)
+    return out
 
 
 def _step5(review, st, step):
     out = _step_head(review, st, step, message=False)
-    out.append(_p("For the review meeting", st["h2"]))
+    out.append(_p("Points we suggest discussing", st["h2"]))
     out += _bullets(step["points"][:8] or ["No discussion points for this filter."], st)
     if step["actions"]:
         out.append(_p("Proposed actions", st["h2"]))
         out.append(_table(step["actions"], [110, 55, 40, 40], st,
                           ["Action", "Owner", review.meta.period, "2026 target"]))
-    return out + _say(step["what_to_say"], st)
+    return out
 
 
 STEP_SECTIONS = {1: _step1, 2: _step2, 3: _step3, 4: _step4, 5: _step5}

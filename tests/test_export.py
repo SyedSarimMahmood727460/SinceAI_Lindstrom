@@ -186,3 +186,74 @@ def test_fixture_is_current(review, con):
     assert fixed.keys() == live.keys()
     for key in live:
         assert fixed[key] == live[key], key
+
+
+def _notes_text(path):
+    return [s.notes_slide.notes_text_frame.text if s.has_notes_slide else ""
+            for s in Presentation(str(path)).slides]
+
+
+def test_pptx_coaching_only_in_notes(review, deck, full_deck):
+    """What to say is the account manager's coaching: speaker notes only, never on a slide."""
+    for path in (deck, full_deck):
+        text = "\n".join(_slides_text(path))
+        notes = "\n".join(_notes_text(path))
+        assert "What to say" not in text
+        from export.sections import meeting_steps
+        says = [st["what_to_say"] for st in meeting_steps(review) if st["what_to_say"]]
+        assert len(says) >= 4
+        for say in says:
+            assert say[:60] not in text
+            assert say in notes
+    for c in review.story:
+        assert c["what_to_say"][:60] not in "\n".join(_slides_text(deck))
+
+
+def test_pptx_step2_without_contract_has_no_prompt(deck):
+    text = _slides_text(deck)[slide_index(deck, "2 · Vs doing it yourself")]
+    assert "Enter the contract price" not in text and "contract price" not in text.lower()
+    assert "Doing it yourself, per year" in text and "€1.96M" in text
+
+
+def _r4_review(review):
+    from insights.story import build_story
+    r4 = next(o for o in review.observations if o.rule_id == "R4")
+    stub = review.model_copy(update={"observations": [r4]})
+    stub.story = build_story(stub)
+    return stub, r4
+
+
+def test_step3_without_facts_has_no_tiles(review, tmp_path):
+    from export.pdf_builder import build_pdf
+    from pypdf import PdfReader
+    stub, r4 = _r4_review(review)
+    path = build_pptx(stub, tmp_path / "r4.pptx")
+    text = _slides_text(path)[slide_index(path, "3 · Where to improve")]
+    assert r4.finding[:50] in text and "Typical site" not in text
+    shapes = Presentation(str(path)).slides[slide_index(path, "3 · Where to improve")].shapes
+    assert not any(sh.top == Inches(2.0) for sh in shapes)  # nothing in the tile band
+    pdf = " ".join(" ".join(p.extract_text().split()) for p in PdfReader(str(build_pdf(stub, tmp_path / "r4.pdf"))).pages)
+    step3 = pdf.split("3 · Where to improve")[1].split("5 · Agree next steps")[0]
+    assert " ".join(r4.finding.split())[:50] in step3 and "Typical site" not in step3
+
+
+def _net_review(review, low, base, high):
+    from model.contracts import Range
+    d = review.dto
+    net = d.diy_total.model_copy(update={"value": base, "range": Range(low=low, base=base, high=high)})
+    return review.model_copy(update={"dto": d.model_copy(update={"net": net, "contract_price": d.diy_total})})
+
+
+def test_step2_net_wording(review):
+    from export.sections import meeting_steps
+    st = meeting_steps(_net_review(review, -297100, 297100, 1079363))[1]
+    assert st["message"].startswith("About €297k less with Lindström than doing it yourself — but the range "
+                                     "runs from €297k more to €1.08M less, so it depends on the assumptions")
+    tile = st["tiles"][0]
+    assert tile["label"] == "Saving with Lindström" and tile["value"] == "€297k"
+    assert tile["range"] == "range −€297k – €1.08M" and "depends on the assumptions" in tile["context"]
+    st = meeting_steps(_net_review(review, -900000, -500000, -100000))[1]
+    assert st["message"].startswith("About €500k (between €100k and €900k) more with Lindström")
+    tile = st["tiles"][0]
+    assert tile["label"] == "Extra cost with Lindström" and tile["value"] == "€500k"
+    assert tile["range"] == "range €100k – €900k" and tile["context"] == "per year"

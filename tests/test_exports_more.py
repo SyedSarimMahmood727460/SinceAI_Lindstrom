@@ -138,7 +138,7 @@ def test_xlsx_meeting_sheet_first(growth_review, review, tmp_path):
                       (growth_review, first3 + ["4 · Grow together", "5 · Agree next steps"])):
         ws = load_workbook(build_xlsx(rv, tmp_path / "m.xlsx")).worksheets[0]
         assert ws.title == "Meeting"
-        assert [c.value for c in ws[1]] == ["Step", "Message", "Figures", "What to say"]
+        assert [c.value for c in ws[1]] == ["Step", "Message", "Figures", "What to say (account manager)"]
         rows = [r for r in ws.iter_rows(min_row=2, values_only=True) if r[0]]
         assert [r[0] for r in rows[:len(steps)]] == steps
         assert all(r[1] and r[3] for r in rows[:len(steps)])  # every step has a message and a What to say
@@ -271,3 +271,13 @@ def test_xlsx_audience_row(con, tmp_path):
         ws = load_workbook(build_xlsx(rv, tmp_path / f"{aud}.xlsx", audience=aud))["Summary"]
         rows = {r[0].value: r[1].value for r in ws.iter_rows(min_row=2)}
         assert rows["Audience"].startswith(expect)
+
+
+def test_pdf_has_no_coaching(pdf, review, growth_review, tmp_path):
+    """The PDF is customer-facing: no account-manager What to say lines."""
+    for path, rv in ((pdf, review), (build_pdf(growth_review, tmp_path / "c.pdf"), growth_review)):
+        text = _pdf_text(path)
+        assert "What to say" not in text and "Worth asking" not in text
+        for c in rv.story:
+            assert " ".join(c["what_to_say"].split())[:50] not in text, c["id"]
+        assert "Points we suggest discussing" in text
