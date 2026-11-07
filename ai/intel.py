@@ -12,6 +12,7 @@ import json
 import os
 import re
 import time
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
@@ -80,7 +81,8 @@ class IntelUnavailable(Exception):
 
 
 def slugify(company: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", company.strip().lower()).strip("-")
+    ascii_name = unicodedata.normalize("NFKD", company).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "-", ascii_name.strip().lower()).strip("-")
 
 
 def _cache_dir() -> Path:

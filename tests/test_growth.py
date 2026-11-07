@@ -98,6 +98,8 @@ def test_growth_wearers(engine):
 def test_growth_overlap_note(engine):
     g = _growth(engine, {"extra_sites": 4, "extra_wearers": 100})
     assert g["notes"] == [OVERLAP_NOTE]
+    assert OVERLAP_NOTE == ("The total assumes the new employees are in addition to those at the "
+                            "new sites; if the new sites bring them, use the sites figure alone.")
     assert OVERLAP_NOTE in g["what_to_say"]
 
 
@@ -252,3 +254,22 @@ def test_service_catalogue_endpoint():
             r = x[k]
             assert 0 < r["low"] <= r["default"] <= r["high"]
         assert x["name"] and x["service_line"] and x["description"]
+
+
+def test_growth_net_range_sign(engine):
+    from metrics.growth import _narrative
+    from model.contracts import Range
+    gp = _growth(engine, {"extra_sites": 4, "expansion_price_eur_per_site_year": 20000})
+
+    def line(low, base, high):
+        net = gp["totals"]["net"].model_copy(
+            update={"value": base, "range": Range(low=low, base=base, high=high)})
+        return _narrative(gp["levers"], {**gp["totals"], "net": net})
+
+    assert ("the service would cost about 297,100 EUR less than doing it yourself — but the "
+            "range runs from 297,100 EUR more to 1,079,363 EUR less, so it depends on the "
+            "assumptions.") in line(-297100, 297100, 1079363)
+    assert ("the service would cost about 500,000 EUR (between 100,000 and 900,000 EUR) more "
+            "than doing it yourself.") in line(-900000, -500000, -100000)
+    assert ("the service would cost about 500,000 EUR (between 100,000 and 900,000 EUR) less "
+            "than doing it yourself.") in line(100000, 500000, 900000)

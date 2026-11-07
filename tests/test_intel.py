@@ -115,6 +115,8 @@ def test_slug():
     assert intel.slugify("  Fazer Group ") == "fazer-group"
     assert intel.slugify("Oy Karl Fazer Ab!") == "oy-karl-fazer-ab"
     assert intel.slugify("../../etc") == "etc"
+    assert intel.slugify("Ö-Yhtiö Oy") == "o-yhtio-oy"
+    assert intel.slugify("Łódź Ltd") and intel.slugify("Pärnu Hotell") == "parnu-hotell"
 
 
 # --- live path (mocked client) ---

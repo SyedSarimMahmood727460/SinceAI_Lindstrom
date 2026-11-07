@@ -210,7 +210,8 @@ def _l003(review) -> dict:
 
 def _s1_asked(prs, d, n):
     s = _slide(prs, "What you asked", n,
-               "Your brief and your feedback: “show us your imagined solution, demoed where possible”.")
+               "Your brief and your feedback, in our summary: show the imagined solution and "
+               "demo it where possible.")
     where = {r["asked"]: r["where"] for r in d["fit"]["brief_map"]}
     rows = [[a, where[a]] for a in ASKED]
     _table(s, MARGIN, Inches(1.7), [6.4, 5.73], rows, ["You asked", "Where it is in Value Review"],

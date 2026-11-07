@@ -509,7 +509,7 @@ async function explain(id, node) {
   const lin = res.lineage || {};
   const how = isSimple() ? '' : `<h3>How it's calculated</h3><div class="formula">${esc(d.formula_text || cur.formula_text)}</div>
     <p class="small">Aggregation: ${esc(d.aggregation)} · unit: ${esc(d.unit)} · inputs: ${esc((d.inputs || []).join(', '))}</p>`;
-  const lineage = isSimple() ? expertHint : `<h3>Lineage</h3><p class="small">Facts: ${esc((lin.facts || []).join(', '))} · ${esc(VR.num(lin.rows))} rows · load ${esc((lin.load_ids || []).join(', '))}${S.product ? '<br>Lineage is shown for all products.' : ''}</p>`;
+  const lineage = isSimple() ? expertHint : `<h3>Lineage</h3><p class="small">Facts: ${esc((lin.facts || []).join(', '))} · ${esc(VR.num(lin.rows))} rows · load ${esc((lin.load_ids || []).join(', '))}${(S.product || S.serviceLine) ? '<br>Lineage is shown for all products and service lines.' : ''}</p>`;
   openDrawer(`<h2>${esc(cur.label)}</h2><p class="small">${esc(nodeName(node))} · ${esc(S.period)}${S.product ? ' · product ' + esc(S.product) : ''}${S.serviceLine ? ' · service line ' + esc(S.serviceLine) : ''}</p>
     <p>${badges(cur, true)}</p>
     <p style="font-size:26px;font-weight:700;color:var(--navy);margin:6px 0">${esc(fmtM(cur))}</p><p class="range">${esc(rangeText(cur))}</p>

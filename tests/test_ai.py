@@ -210,6 +210,7 @@ def test_retry_feeds_violations_back(monkeypatch, review):
 
 def test_llm_narrative_cached_per_run_id(monkeypatch, con):
     build_mod._NARRATIVES.clear()
+    monkeypatch.setattr(build_mod, "_LLM_BACKOFF_UNTIL", 0.0)
     monkeypatch.setattr(llm, "use_llm", lambda: True)
     params = ReviewParams(account_id="CUST001")
     fake = FakeClient(_good(build_review(con, params)))
@@ -277,3 +278,46 @@ def test_intent_word_boundaries():
     assert intent.keyword_intent("circular service", ACCOUNTS, BASELINES).priorities \
         == ["circularity"]
     assert intent.keyword_intent("late deliveries", ACCOUNTS, BASELINES).priorities == ["service"]
+
+
+def test_llm_failure_backoff(monkeypatch, con):
+    """After an LLM error or timeout the template is used for LLM_BACKOFF_S without retrying."""
+    build_mod._NARRATIVES.clear()
+    monkeypatch.setattr(build_mod, "_LLM_BACKOFF_UNTIL", 0.0)
+    monkeypatch.setattr(llm, "use_llm", lambda: True)
+    calls = []
+
+    class Down:
+        def __init__(self):
+            self.messages = SimpleNamespace(create=self.create)
+
+        def create(self, **kw):
+            calls.append(kw)
+            raise TimeoutError("unreachable")
+
+    def client():
+        calls.append("client")
+        return Down()
+
+    monkeypatch.setattr(llm, "get_client", client)
+    a = build_review(con, ReviewParams(account_id="CUST001"), use_ai=True)
+    n_first = len(calls)
+    assert a.narrative.generated_by == "template" and "client" in calls
+    b = build_review(con, ReviewParams(account_id="CUST001", sensitivity="low"), use_ai=True)
+    assert b.narrative.generated_by == "template"
+    assert calls.count("client") == 1 and len(calls) == n_first  # no second attempt in the window
+    # after the window the LLM is tried again
+    monkeypatch.setattr(build_mod, "_LLM_BACKOFF_UNTIL", 0.0)
+    build_review(con, ReviewParams(account_id="CUST001", sensitivity="high"), use_ai=True)
+    assert calls.count("client") == 2
+    build_mod._NARRATIVES.clear()
+
+
+def test_llm_guard_rejection_does_not_back_off(monkeypatch, con):
+    build_mod._NARRATIVES.clear()
+    monkeypatch.setattr(build_mod, "_LLM_BACKOFF_UNTIL", 0.0)
+    monkeypatch.setattr(llm, "use_llm", lambda: True)
+    bad = json.dumps({"exec_summary": "Saved 999 t", "discussion_points": ["a"] * 5})
+    monkeypatch.setattr(llm, "get_client", lambda: FakeClient(bad, bad))
+    r = build_review(con, ReviewParams(account_id="CUST001"), use_ai=True)
+    assert r.narrative.generated_by == "template" and build_mod._LLM_BACKOFF_UNTIL == 0.0

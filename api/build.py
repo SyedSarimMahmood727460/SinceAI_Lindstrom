@@ -6,6 +6,7 @@ import json
 import re
 import statistics
 import threading
+import time
 from datetime import datetime, timezone
 
 from api.review_model import (
@@ -35,6 +36,11 @@ MIN_SITES = 3
 _NARRATIVES: dict[str, Narrative] = {}  # LLM narratives by run_id, so chip clicks don't re-call
 _CACHE_MAX = 256
 _NARRATIVES_LOCK = threading.Lock()  # guards the dict only, never the LLM call
+# Negative cache: after an LLM error or timeout, skip LLM attempts until this monotonic time
+# (the template is used), so an unreachable API doesn't stall every review load and export.
+LLM_BACKOFF_S = 120.0
+_LLM_BACKOFF_UNTIL = 0.0
+_LLM_BACKOFF_LOCK = threading.Lock()
 
 _C1 = re.compile(r"customer washed_kg ([\d.]+) vs laundry washed_kg ([\d.]+) \(ratio ([\d.]+)x\)")
 DQ_COLS = ("check_id", "severity", "entity_type", "entity_id", "month", "detail")
@@ -61,13 +67,22 @@ def _narrate(review: ReviewModel, use_llm: bool) -> Narrative:
     """LLM narrative when enabled (VR_AI, API key), else the template; always guard-checked."""
     from ai import llm
     from ai.narrator import narrate
+    global _LLM_BACKOFF_UNTIL
     if not (use_llm and llm.use_llm()):
         return narrate(review, False)
     key = review.meta.run_id
     with _NARRATIVES_LOCK:
         if key in _NARRATIVES:
             return _NARRATIVES[key]
-    result = narrate(review, True)
+    with _LLM_BACKOFF_LOCK:
+        backing_off = time.monotonic() < _LLM_BACKOFF_UNTIL
+    if backing_off:  # a recent LLM error or timeout: use the template without waiting
+        return narrate(review, False)
+    status: dict = {}
+    result = narrate(review, True, status)
+    if status.get("llm_error") and result.generated_by != "llm":
+        with _LLM_BACKOFF_LOCK:
+            _LLM_BACKOFF_UNTIL = time.monotonic() + LLM_BACKOFF_S
     if result.generated_by == "llm":  # a template fallback is retried on the next request
         with _NARRATIVES_LOCK:
             if len(_NARRATIVES) >= _CACHE_MAX:

@@ -110,3 +110,24 @@ def test_fmt_number_count_has_no_unit_and_no_lowercase_start():
     assert fmt_number(24, "count") == "24"
     out = _no_internal("Idle stock is high; the note stays. other text")
     assert all(p.strip()[0].isupper() for p in out.split(". ") if p.strip())
+
+
+def _strip_volatile(x):
+    """Drop per-load / per-run identifiers (load ids, run id, timestamps)."""
+    if isinstance(x, dict):
+        return {k: _strip_volatile(v) for k, v in x.items()
+                if k not in ("load_ids", "load_id", "run_id", "generated_at")}
+    if isinstance(x, list):
+        return [_strip_volatile(v) for v in x]
+    return x
+
+
+def test_fixture_is_current(review, con):
+    """The committed fixture matches today's build_review (regenerate it when the model changes:
+    build_review(con, ReviewParams(account_id="CUST001")), UTF-8, indent 2)."""
+    live = build_review(con, ReviewParams(account_id="CUST001")).model_dump(mode="json")
+    live = _strip_volatile(live)
+    fixed = _strip_volatile(review.model_dump(mode="json"))
+    assert fixed.keys() == live.keys()
+    for key in live:
+        assert fixed[key] == live[key], key

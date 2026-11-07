@@ -84,7 +84,12 @@ def _log(review: ReviewModel, record: dict) -> None:
         pass
 
 
-def narrate(review: ReviewModel, use_llm: bool) -> Narrative:
+def narrate(review: ReviewModel, use_llm: bool, status: dict | None = None) -> Narrative:
+    """Guarded LLM narrative, else the template. When `status` is given, `status["llm_error"]`
+    is set True if the API could not be reached (no client, network error, timeout) — as
+    opposed to a reply the guard rejected — so the caller can back off."""
+    status = {} if status is None else status
+    status["llm_error"] = False
     if not use_llm:
         return template_narrative(review)
     values = placeholder_values(review)
@@ -104,19 +109,24 @@ def narrate(review: ReviewModel, use_llm: bool) -> Narrative:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 record["attempts"].append({"error": "timeout"})
+                status["llm_error"] = True
                 break
             attempt: dict = {}
             record["attempts"].append(attempt)
             out = ""
+            replied = False
             try:
                 resp = client.messages.create(model=llm.MODEL, max_tokens=1200, system=system,
                                               messages=[*base, *feedback], timeout=remaining)
+                replied = True
                 out = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
                 attempt["output"] = out
                 summary, points = _parse(out)
                 problems = _validate(summary, points, allowed, banned, values)
             except Exception as e:  # network, timeout, malformed output: try again, then fall back
                 attempt["error"] = f"{type(e).__name__}: {e}"
+                if not replied:  # the API call itself failed (network, timeout)
+                    status["llm_error"] = True
                 problems = [f"the reply was not valid JSON of the required shape ({type(e).__name__})"]
                 summary = points = None
             attempt["violations"] = problems
@@ -132,6 +142,7 @@ def narrate(review: ReviewModel, use_llm: bool) -> Narrative:
                         else [{"role": "user", "content": note}])
     except Exception as e:  # no client / no key
         record["attempts"].append({"error": f"{type(e).__name__}: {e}"})
+        status["llm_error"] = True
     record["generated_by"] = result.generated_by if result else "template"
     _log(review, record)
     return result or template_narrative(review)

@@ -33,8 +33,8 @@ METRICS = {  # key -> (label, unit)
 HUMAN = {"diy_cost_avoided": "do-it-yourself cost avoided", "staff_hours_freed": "staff hours freed",
          "co2_saving_kg": "CO2e saving", "water_saving_l": "water saving"}
 ALREADY_USED = "already used by this customer"
-OVERLAP_NOTE = ("Sites and employees may overlap — don't add the two levers if the new sites "
-                "bring the new employees.")
+OVERLAP_NOTE = ("The total assumes the new employees are in addition to those at the new sites; "
+                "if the new sites bring them, use the sites figure alone.")
 PARTIAL = "(based on partial data)"
 TAGS = {"diy_cost_avoided": "cost", "staff_hours_freed": "service",
         "co2_saving_kg": "emissions", "water_saving_l": "water"}
@@ -287,8 +287,8 @@ def _narrative(levers: list[dict], totals: dict) -> str:
     if co2.value is not None and co2.value > 0:
         line += f" and save {_about(co2)}"
     if totals["net"] is not None and totals["net"].value is not None:
-        word = "less" if totals["net"].value >= 0 else "more"
-        line += (f"; including the Lindström price, the service would cost "
-                 f"{_about(totals['net'], absolute=True)} {word} than doing it yourself")
+        from insights.story import signed_about
+        line += ("; including the Lindström price, the service would cost "
+                 + signed_about(totals["net"], "less", "more", " than doing it yourself"))
     return line + "."
 

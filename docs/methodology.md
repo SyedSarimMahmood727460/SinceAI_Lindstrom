@@ -178,14 +178,14 @@ Mats are washed by kg in the same laundries, so per-kg allocation applies. Assum
 
 ## 15. Relatable comparisons (`config/relatable.yaml`)
 
-The customer story turns two savings into everyday terms: value ÷ factor, rounded to 2 significant figures, prefixed "≈" and always labelled "illustrative comparison". They are never inputs to a calculation.
+The customer story turns two savings into everyday terms: value ÷ factor, rounded to 2 significant figures, prefixed "≈" and always labelled "illustrative comparison". They are never inputs to a calculation. A comparison is omitted when the ratio is below 1. The car factor is CO₂ only while the saving is CO₂e, so that comparison is approximate.
 
 | Metric | Factor | Derivation | Sources |
 |---|---|---|---|
 | Water saving | 100,156 l per Finnish household per year | 140 l per person per day × 365 × 1.96 persons per household | Motiva figure as quoted by Cozify; Statistics Finland (household size 2020) |
 | CO2e saving | 1,908.2 kg CO2 per average Finnish passenger car per year | 136.3 g/km × 14,000 km | Traficom average via OpenCO2.net (2025); Traficom emissions calculator default mileage |
 
-Example (NorthStar, 2025, B_LOCAL): ≈ 14 households' yearly water use and ≈ 130 cars' CO₂ for a year.
+Example (NorthStar, 2025, B_LOCAL): ≈ 14 households' yearly water use and ≈ the yearly CO₂ emissions of 130 cars (car figure CO₂ only; the saving is CO₂e).
 
 ## 16. Customer story and Simple mode
 

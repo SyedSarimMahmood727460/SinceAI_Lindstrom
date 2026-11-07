@@ -45,6 +45,24 @@ def _about(m, absolute: bool = False) -> str:
     return f"about {x} (between {lo:,.{dec}f} and {hi:,.{dec}f}{suffix})"
 
 
+def signed_about(m, more: str, less: str, tail: str) -> str:
+    """'about X {more|less}{tail}' for a signed amount (e.g. a net cost), worded honestly.
+
+    The direction word follows the headline value. When the range stays on one side of zero
+    the absolute range is appended as usual; when it crosses zero the sentence says so:
+    'about X more than the service — but the range runs from A less to B more, so it
+    depends on the assumptions'."""
+    word = more if m.value >= 0 else less
+    r = m.range
+    if r is not None and r.low is not None and r.high is not None:
+        lo, hi = min(r.low, r.high), max(r.low, r.high)
+        if lo < 0 < hi:
+            return (f"about {_fmt(abs(m.value), m.unit)} {word}{tail} — but the range runs "
+                    f"from {_fmt(-lo, m.unit)} {less} to {_fmt(hi, m.unit)} {more}, "
+                    "so it depends on the assumptions")
+    return f"{_about(m, absolute=True)} {word}{tail}"
+
+
 def round_sig(x: float, sig: int = 2) -> float:
     if x == 0:
         return 0.0
@@ -57,13 +75,16 @@ def _num(x: float) -> str:
 
 def relatable_text(kpis: dict[str, Any], metric_ids: list[str]) -> str | None:
     """'≈ n ... (illustrative comparison)' for the factors of the given metrics; None when no
-    factor applies or the value is not positive."""
+    factor applies, the value is not positive or the ratio is below 1."""
     parts = []
     for f in load_yaml("relatable.yaml"):
         m = kpis.get(f["metric"])
         if f["metric"] not in metric_ids or not _present(m) or m.value <= 0:
             continue
-        n = round_sig(m.value / f["factor"])
+        ratio = m.value / f["factor"]
+        if ratio < 1:  # "≈ 0.42 households" is not relatable
+            continue
+        n = round_sig(ratio)
         label = f["label_one"] if n == 1 and f.get("label_one") else f["label_template"].format(n=_num(n))
         parts.append(f"≈ {label}")
     if not parts:
@@ -98,9 +119,8 @@ def _vs_diy(review, k):
     statement = f"Doing the same yourself would cost {_about(d.diy_total)} in {review.meta.period}"
     if d.contract_price is not None and _present(d.contract_price) and _present(d.net):
         refs += ["dto_contract_price", "dto_net"]
-        word = "more" if d.net.value >= 0 else "less"
         statement += (f", against a Lindström contract of {_fmt(d.contract_price.value, d.contract_price.unit)}: "
-                      f"{_about(d.net, absolute=True)} {word} than the service.")
+                      f"{signed_about(d.net, 'more', 'less', ' than the service')}.")
     else:
         statement += "."
     if d.missing_lines:

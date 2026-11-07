@@ -113,3 +113,48 @@ def test_story_no_redundant_unit_words(con):
     r = build_review(con, ReviewParams(account_id="CUST001"))
     st = next(c for c in r.story if c["id"] == "value_delivered")["statement"]
     assert "greenhouse gas" not in st and "CO2e of" not in st
+
+
+def _net_story(r, low, base, high):
+    from model.contracts import Range
+    d = r.dto
+    net = d.net.model_copy(update={"value": base, "range": Range(low=low, base=base, high=high)})
+    stub = r.model_copy(update={"dto": d.model_copy(update={"net": net})})
+    return next(c for c in build_story(stub) if c["id"] == "vs_diy")["statement"]
+
+
+def test_story_net_range_sign(con, tmp_path, monkeypatch):
+    monkeypatch.setenv("VR_INPUTS_DIR", str(tmp_path))
+    from config.loader import load_assumptions
+    from model.inputs_store import save_inputs
+    save_inputs("CUST001", {"contract_price_eur_per_year": 1660410},
+                load_assumptions()["dto_inputs"])
+    r = build_review(con, ReviewParams(account_id="CUST001"))
+    assert r.dto.net is not None
+    # straddling zero: the sign is spelled out, never "between 297,100 and 1,079,363 more"
+    st = _net_story(r, -297100, 297100, 1079363)
+    assert ("about 297,100 EUR more than the service — but the range runs from 297,100 EUR "
+            "less to 1,079,363 EUR more, so it depends on the assumptions.") in st
+    assert "between" not in st.split("contract of")[1].split("It also")[0]
+    # fully negative: "less", with the absolute range
+    st = _net_story(r, -900000, -500000, -100000)
+    assert "about 500,000 EUR (between 100,000 and 900,000 EUR) less than the service." in st
+    # fully positive: "more"
+    st = _net_story(r, 100000, 500000, 900000)
+    assert "about 500,000 EUR (between 100,000 and 900,000 EUR) more than the service." in st
+
+
+def test_relatable_omitted_below_one(con):
+    from insights.story import relatable_text
+    from model.contracts import Range
+    r = build_review(con, ReviewParams(account_id="CUST001"))
+    k = {x.metric_id: x for x in r.kpis}
+    small = {"water_saving_l": k["water_saving_l"].model_copy(
+                 update={"value": 42000.0, "range": Range(low=40000, base=42000, high=44000)}),
+             "co2_saving_kg": k["co2_saving_kg"].model_copy(update={"value": 800.0})}
+    assert relatable_text(small, ["water_saving_l", "co2_saving_kg"]) is None
+    assert relatable_text({**small, "co2_saving_kg": k["co2_saving_kg"].model_copy(
+        update={"value": 1908.2})}, ["water_saving_l", "co2_saving_kg"]) == (
+        "≈ the yearly CO₂ emissions of one average Finnish passenger car (illustrative comparison)")
+    rel = next(c for c in r.story if c["id"] == "value_delivered")["relatable"]
+    assert "yearly CO₂ emissions of" in rel and "cars" in rel
