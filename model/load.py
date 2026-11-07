@@ -18,7 +18,7 @@ from model.validate import consistency_checks, validate_frames
 log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SOURCES = ROOT / "config" / "sources.yaml"
-DEFAULT_PACK = ("../lindstrom_pack/Lindstrom_SinceAI2026/"
+DEFAULT_PACK = ("data/lindstrom_pack/"
                 "Lindstrom_SinceAI_Customer_Value_Synthetic_Data_Pack.xlsx")
 DIM_TABLES = ["org_node", "product", "laundry"]
 DDL = Path(__file__).with_name("ddl.sql")

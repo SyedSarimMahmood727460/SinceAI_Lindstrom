@@ -24,7 +24,7 @@ What it does:
 
 Requires Python 3.12.
 
-**The data pack is not in this repository.** By default the server looks for it at `../lindstrom_pack/Lindstrom_SinceAI2026/Lindstrom_SinceAI_Customer_Value_Synthetic_Data_Pack.xlsx`, relative to the repository root (so next to the `value-review` folder). If it lives elsewhere, point `VR_PACK_PATH` at the `.xlsx` file as below. If the file is missing, the server stops at start-up with an error naming `VR_PACK_PATH`.
+**The synthetic data pack is included** at `data/lindstrom_pack/Lindstrom_SinceAI_Customer_Value_Synthetic_Data_Pack.xlsx`, which is the default path, so no setup is needed. To use another pack, point `VR_PACK_PATH` at the `.xlsx` file as below. If the file is missing, the server stops at start-up with an error naming `VR_PACK_PATH`.
 
 ```bat
 cd value-review
@@ -45,7 +45,7 @@ The pack is loaded into an in-memory DuckDB at server start (a few seconds). A r
 
 | Variable | Default | Effect |
 |---|---|---|
-| `VR_PACK_PATH` | `../lindstrom_pack/Lindstrom_SinceAI2026/Lindstrom_SinceAI_Customer_Value_Synthetic_Data_Pack.xlsx` (relative to the repo root) | Path to the Excel data pack (the `excel_pack` entry in `config/sources.yaml`). |
+| `VR_PACK_PATH` | `data/lindstrom_pack/Lindstrom_SinceAI_Customer_Value_Synthetic_Data_Pack.xlsx` (relative to the repo root) | Path to the Excel data pack (the `excel_pack` entry in `config/sources.yaml`). |
 | `VR_EXTENSIONS` | `on` | `VR_EXTENSIONS=off` disables the extension pack (its `toggle_env` in `config/sources.yaml`): 3 customers instead of 4, for a before/after demo. The test suite runs with it off (`tests/conftest.py`); extension tests switch it on. |
 | `VR_INPUTS_DIR` | `data/kam_inputs/` (gitignored) | Where the account manager's inputs ("Your numbers" and the growth scenario) are stored, one JSON file per account. Tests and the pitch-deck script point it at a temp dir. |
 | `VR_CONFIG_DIR` | `config/` | Alternative config directory (used by the extensibility test). |

@@ -8,7 +8,7 @@ os.environ.setdefault("VR_EXTENSIONS", "off")
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PACK = (
-    "../lindstrom_pack/Lindstrom_SinceAI2026/"
+    "data/lindstrom_pack/"
     "Lindstrom_SinceAI_Customer_Value_Synthetic_Data_Pack.xlsx"
 )
 

@@ -23,7 +23,7 @@ from model.load import load_sources
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "web"
-DEFAULT_PACK = ("../lindstrom_pack/Lindstrom_SinceAI2026/"
+DEFAULT_PACK = ("data/lindstrom_pack/"
                 "Lindstrom_SinceAI_Customer_Value_Synthetic_Data_Pack.xlsx")
 KNOWN_PRIORITIES = ("water", "emissions", "cost", "circularity", "service")
 PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
