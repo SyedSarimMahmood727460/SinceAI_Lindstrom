@@ -1,4 +1,7 @@
 [
+  {"id": "story_cards", "pack": "general", "page": "story", "component": "story_cards",
+   "required_metrics": [], "priority_tags": [], "industries": ["*"]},
+
   {"id": "overview_kpis", "pack": "general", "page": "overview", "component": "kpi_row",
    "required_metrics": ["active_wearers", "sites", "garments_allocated", "utilisation", "on_time_rate",
                         "service_requests_per_100w", "repairs", "water_saving_l", "co2_saving_kg",

@@ -43,11 +43,63 @@ function fmtRange(m) {
   const [a] = scale(m.unit, lo), [b, u] = scale(m.unit, hi);
   return `range ${a}–${u === '%' ? b + '%' : b + (u ? ' ' + u : '')}`;
 }
+/** Simple mode: 'about X (between A and B)'; 'about X' when there is no spread. */
+function fmtAbout(m) {
+  if (!m || m.value == null) return '–';
+  const x = fmtM(m);
+  if (!m.range || m.range.low == null || m.range.high == null) return `about ${x}`;
+  const lo = Math.min(m.range.low, m.range.high), hi = Math.max(m.range.low, m.range.high);
+  const [a] = scale(m.unit, lo), [b, u] = scale(m.unit, hi);
+  if (a === b) return `about ${x}`;
+  return `about ${x} (between ${a} and ${u === '%' ? b + '%' : b + (u ? ' ' + u : '')})`;
+}
 const tagLabels = tags => (tags || []).map(t => PRI[t] || t).join(', ');
 
-/** Method-status badge, SYN marker, and a warning sign for dq_warning. */
+// ---------- Simple / Expert mode (display only) ----------
+// Simple (default) hides z-scores, method-status / provenance badges (one "estimate" pill instead),
+// lineage and formula text; ranges read "about X (between A and B)". Expert shows everything.
+let MODE = 'simple';
+const setMode = m => { MODE = m === 'expert' ? 'expert' : 'simple'; };
+const isSimple = () => MODE === 'simple';
+/** Range line for a metric in the current mode ('' when the metric has no range). */
+const rangeText = m => (!m || !m.range ? '' : (isSimple() ? fmtAbout(m) : fmtRange(m)));
+
+// ---------- glossary (config/glossary.yaml via /config/glossary) ----------
+// Each term matches its own name plus the word forms used in the dashboard text.
+const GLOSS_FORMS = {baseline: 'baselines?', allocation: 'allocat(?:ion|ed)', scope3: 'Scope 3', utilisation: 'utilisation',
+  range_sensitivity: 'sensitivity', estimate: 'estimates?', repair_handprint: 'handprint',
+  data_consistency_warning: 'data-consistency warnings?'};
+const reEsc = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+let GLOSS = {}, GLOSS_IDS = [], GLOSS_RE = null;
+function setGlossary(terms) {
+  GLOSS = {}; GLOSS_IDS = [];
+  (terms || []).forEach(t => { if (t && t.id && t.definition) { GLOSS[t.id] = t; GLOSS_IDS.push(t.id); } });
+  const alt = GLOSS_IDS.map(id => `(${GLOSS_FORMS[id] || reEsc(GLOSS[id].term)})`);
+  GLOSS_RE = alt.length ? new RegExp(`\\b(?:${alt.join('|')})\\b`, 'gi') : null;
+}
+const glossTerm = id => GLOSS[id] || null;
+/** Escaped text with the first occurrence of each glossary term marked (dotted underline + tooltip). */
+function gloss(text) {
+  const h = esc(text);
+  if (!GLOSS_RE) return h;
+  const used = new Set();
+  return h.replace(GLOSS_RE, (w, ...groups) => {
+    const id = GLOSS_IDS[groups.slice(0, GLOSS_IDS.length).findIndex(g => g !== undefined)];
+    if (!id || used.has(id)) return w;
+    used.add(id);
+    return `<span class="gl" data-term="${esc(id)}" tabindex="0">${w}</span>`;
+  });
+}
+
+/** Method-status badge, SYN marker, and a warning sign for dq_warning.
+ * Simple mode: a single "estimate" pill for ESTIMATED values (plus the warning sign). */
 function badges(m, withConf) {
   if (!m) return '';
+  if (isSimple()) {
+    let s = m.method_status === 'ESTIMATED' ? '<span class="pill gl" data-term="estimate" tabindex="0">estimate</span>' : '';
+    if (m.dq_warning) s += '<span class="warn" title="An input carries a data-consistency warning (see Data readiness)">⚠</span>';
+    return s;
+  }
   let h = `<span class="badge b-${esc(m.method_status)}">${esc(m.method_status)}</span>`;
   if (m.provenance === 'SYNTHETIC') h += '<span class="badge b-SYN" title="Synthetic source data">SYN</span>';
   if (m.dq_warning) h += '<span class="warn" title="An input carries a data-consistency warning (see Data readiness)">⚠</span>';
@@ -62,9 +114,11 @@ function weight(tags, pri) {
 
 function kpiTile(m, node, pri) {
   const focus = pri && (m.priority_tags || []).some(t => pri.includes(t));
-  const sub = m.method_status === 'ESTIMATED' && m.range ? fmtRange(m) : (m.confidence ? `${m.confidence} confidence` : '');
-  return `<div class="card kpi ${focus ? 'focus' : ''}" data-explain="${esc(m.metric_id)}" data-node="${esc(node)}" title="${esc(m.formula_text || '')}">
-    <div class="badges">${badges(m)}</div><div class="l">${esc(m.label)}</div>
+  const sub = m.method_status === 'ESTIMATED' && m.range ? rangeText(m)
+    : (m.confidence && !isSimple() ? `${m.confidence} confidence` : '');
+  const tip = isSimple() ? 'Click to see what this figure means' : (m.formula_text || '');
+  return `<div class="card kpi ${focus ? 'focus' : ''}" data-explain="${esc(m.metric_id)}" data-node="${esc(node)}" title="${esc(tip)}">
+    <div class="badges">${badges(m)}</div><div class="l">${gloss(m.label)}</div>
     <div class="v">${esc(fmtM(m))}</div><div class="s">${esc(sub)}</div></div>`;
 }
 
@@ -92,7 +146,43 @@ const RANK_BY = {
 const HEADLINE_ROWS = new Set(['overview_kpis']);
 const MOD_TITLES = {idle_stock: 'Idle stock · internal (KAM view only)'};
 
+/** A story value reference: an account KPI, or one of the do-it-yourself (DTO) results. */
+function storyRef(R, id) {
+  const k = R.kpis.find(x => x.metric_id === id);
+  if (k) return k;
+  const d = R.dto;
+  if (!d) return null;
+  const map = {dto_diy_total: d.diy_total, dto_contract_price: d.contract_price, dto_net: d.net,
+    dto_staff_hours_freed: d.convenience && d.convenience.staff_hours_freed};
+  return map[id] || null;
+}
+
 const Components = {
+  // Customer story (G9): plain-language headline cards from review.story; the statements are
+  // filled by the engine (insights/story.py), the UI adds no numbers.
+  story_cards(ctx) {
+    const cards = ctx.R.story || [];
+    if (!cards.length) return {html: '<div class="card empty">No story cards for this view.</div>'};
+    const html = cards.map((c, i) => {
+      const refs = (c.value_refs || []).map(id => storyRef(ctx.R, id)).filter(Boolean);
+      let based = '';
+      if (isSimple()) {
+        if (refs.some(m => m.method_status === 'ESTIMATED')) based = badges({method_status: 'ESTIMATED'});
+      } else if (refs.length) {
+        based = 'Based on: ' + refs.map(m => `<span class="ref">${esc(m.label || m.metric_id)} ${badges(m)}</span>`).join(' ');
+      }
+      return `<div class="card story-card" data-card="${esc(c.id)}">
+        <div class="story-n">${i + 1}</div><h2>${esc(c.title)}</h2>
+        <div class="story-statement">${gloss(c.statement)}</div>
+        ${c.relatable ? `<div class="story-rel" title="A rough equivalent to help the figure land, not a measured result">${esc(c.relatable)}</div>` : ''}
+        <div class="say"><div class="say-h">What to say <button class="btn ghost sm" data-copy="${i}" title="Copy the talking point">Copy</button></div>
+          <div class="say-t">${gloss(c.what_to_say)}</div></div>
+        <div class="story-foot"><span class="story-based">${based}</span>
+          <span class="link" data-detail="${esc(c.detail_view || '')}">Show the detail →</span></div></div>`;
+    }).join('');
+    return {html: `<div class="story">${html}</div>`};
+  },
+
   kpi_row(ctx) {
     let list;
     if (HEADLINE_ROWS.has(ctx.mod.id)) {
@@ -149,11 +239,11 @@ const Components = {
     const body = rows.map(s => `<tr class="click ${S.site === s.node_id ? 'sel' : ''}" data-site="${esc(s.node_id)}">${cols.map(([, k]) => {
       if (textCols.has(k)) return `<td class="l">${esc(s[k])}</td>`;
       const m = s.metrics[k]; const z = zf[k] ? zf[k](s) : null;
-      const dot = z != null && Math.abs(z) >= 1.5 ? ` <span class="flag" title="z = ${num(z, 1)} vs peer sites">●</span>` : '';
+      const dot = z != null && Math.abs(z) >= 1.5 ? ` <span class="flag" title="${isSimple() ? 'Unusual compared with the other sites' : `z = ${num(z, 1)} vs peer sites`}">●</span>` : '';
       const w = m && m.dq_warning ? '<span class="warn" title="Data-consistency warning">⚠</span>' : '';
       return `<td>${esc(m ? cellFmt(m) : '–')}${w}${dot}</td>`; }).join('')}</tr>`).join('');
     return {html: `<div class="card"><table>${head}${body}</table>
-      <div class="small" style="margin-top:6px">Click a column to sort, or a row to drill down. <span class="flag">●</span> = outlier vs peer sites (|z| ≥ 1.5).</div></div>`};
+      <div class="small" style="margin-top:6px">Click a column to sort, or a row to drill down. <span class="flag">●</span> = ${isSimple() ? 'unusual compared with the other sites' : 'outlier vs peer sites (|z| ≥ 1.5)'}.</div></div>`};
   },
 
   site_detail(ctx) {
@@ -195,7 +285,7 @@ const Components = {
       return `<div class="card kpi" data-explain="${s}" data-node="${esc(ctx.R.meta.node.id)}"><div class="small">${l}</div>
         <div style="font-size:22px;font-weight:700;color:var(--navy)">${esc(fmtM(sv))} saved</div>
         <div class="small">Lindström ${esc(fmtM(k(a)))} ${badges(k(a))} vs ${esc(b)} ${esc(fmtM(k(bl)))}</div>
-        <div class="range">${esc(fmtRange(sv))} · ${badges(sv, true)}</div></div>`; }).join('')}</div>`};
+        <div class="range">${esc(rangeText(sv))} · ${badges(sv, true)}</div></div>`; }).join('')}</div>`};
   },
 
   footprint_pct_chart(ctx) {
@@ -203,8 +293,8 @@ const Components = {
     const ms = ids.map(ctx.kpi), b = ctx.R.meta.baseline.name;
     const max = Math.max(110, ...ms.map(m => (m && m.range ? m.range.high : m && m.value) || 0));
     return {cls: 'w6', html: `<div class="card"><h2>Lindström footprint as % of baseline</h2>${chart('chBase')}
-      <div class="legend">${ms.map(m => `<span>${esc(m.label)}: ${esc(fmtM(m))} (${esc(fmtRange(m))}) ${badges(m)}</span>`).join('')}</div>
-      <div class="legend">Footprint = allocated from laundry level by washed-kg share (A003). Baseline = washed kg × baseline factor.</div></div>`,
+      <div class="legend">${ms.map(m => `<span>${esc(m.label)}: ${isSimple() ? esc(rangeText(m) || fmtM(m)) : `${esc(fmtM(m))} (${esc(fmtRange(m))})`} ${badges(m)}</span>`).join('')}</div>
+      <div class="legend"><span>${gloss(`Footprint = allocated from laundry level by washed-kg share${isSimple() ? '' : ' (A003)'}. Baseline = washed kg × baseline factor.`)}</span></div></div>`,
     charts: [{id: 'chBase', type: 'bar', data: {labels: ['Water', 'CO₂e (washing + logistics)', 'Energy'], datasets: [
       {label: `${b} = 100`, data: [100, 100, 100], backgroundColor: COLORS.light},
       {label: 'Lindström (allocated), % of baseline', data: ms.map(m => m.value), backgroundColor: COLORS.navy}]},
@@ -313,12 +403,16 @@ const Components = {
   },
 };
 
+/** Simple mode drops the z-score the engine appends to a finding, e.g. " (z = -1.5)". */
+const plainFinding = f => (isSimple() ? String(f || '').replace(/\s*\(z\s*=\s*[-−]?[\d.,]+\)/g, '') : f);
+
 function obsHtml(o, i, idx) {
   const warn = o.rule_id === 'R8';
   return `<div class="obs ${warn ? 'warn' : ''}"><div class="t">${warn ? '⚠ ' : (i == null ? '' : (i + 1) + '. ')}${esc(o.title)}</div>
-    <div class="d">${esc(o.finding)}</div><div class="a"><b>Next step:</b> ${esc(o.action)}</div>
+    <div class="d">${gloss(plainFinding(o.finding))}</div><div class="a"><b>Next step:</b> ${esc(o.action)}</div>
     <div class="meta">${badges(o, true)} <span>tags: ${esc(tagLabels(o.tags))}</span> <span class="link" data-evidence="${idx}">Show evidence &amp; formula</span></div></div>`;
 }
 
-window.VR = {Components, PRI, esc, num, fmtV, fmtM, fmtRange, badges, weight, obsHtml};
+window.VR = {Components, PRI, esc, num, fmtV, fmtM, fmtRange, fmtAbout, rangeText, badges, weight, obsHtml,
+  setMode, isSimple, setGlossary, glossTerm, gloss, plainFinding};
 })();
