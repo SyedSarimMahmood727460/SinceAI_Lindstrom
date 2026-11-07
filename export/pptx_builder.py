@@ -12,7 +12,8 @@ from pptx.util import Emu, Inches, Pt
 from export import charts
 from export.format import _scale, fmt_number, fmt_range, fmt_value  # noqa: F401  (re-exported)
 from export.sections import (  # noqa: F401  (PRIORITY_LABEL / SITE_METRIC re-exported)
-    PRIORITY_LABEL, SITE_METRIC, diy_view, growth_view, site_groups)
+    PRIORITY_LABEL, SITE_METRIC, WARN, _customer_kpis, _focus_text, _no_data, _no_internal, _top_kpis,
+    diy_view, growth_view, site_groups, tag)
 
 NAVY = RGBColor(0x1B, 0x2A, 0x4A)
 RED = RGBColor(0xD7, 0x19, 0x20)
@@ -21,24 +22,12 @@ LIGHT = RGBColor(0xF1, 0xF3, 0xF7)
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
 INK = RGBColor(0x1F, 0x29, 0x37)
 FONT = "Calibri"
-WARN = "⚠"
 
 SLIDE_W, SLIDE_H = Inches(13.333), Inches(7.5)
 MARGIN = Inches(0.6)
 CONTENT_W = SLIDE_W - 2 * MARGIN
 
 # ---------------------------------------------------------------- formatting
-
-def tag(metric) -> str:
-    return f"[{metric.method_status.value}]" + (f" {WARN}" if metric.dq_warning else "")
-
-
-def _no_internal(text: str) -> str:
-    """Drop clauses that mention internal-only metrics (the deck is customer-facing)."""
-    parts = [t for t in str(text).replace(";", ".").split(".") if t.strip() and "idle stock" not in t.lower()]
-    parts = [t.strip()[0].upper() + t.strip()[1:] for t in parts]
-    return ". ".join(parts) + ("." if parts else "")
-
 
 def clip(text: str, n: int) -> str:
     text = " ".join(str(text).split())
@@ -150,22 +139,9 @@ def _table(slide, x, y, widths, rows, header, size=13, row_h=0.42, header_size=N
 
 # ---------------------------------------------------------------- content helpers
 
-def _customer_kpis(review):
-    return [k for k in review.kpis if k.customer_facing]
-
-
-def _no_data(review) -> bool:
-    return not any(k.value is not None for k in _customer_kpis(review))
-
-
 def _no_data_note(slide, text="No data for this filter"):
     _, tf = _textbox(slide, MARGIN, Inches(2.5), CONTENT_W, Inches(1))
     _run(tf.paragraphs[0], text, 24, True, GREY)
-
-
-def _focus_text(review) -> str:
-    labels = [PRIORITY_LABEL.get(p, p.title()) for p in review.context.active_priorities[:3]]
-    return ", ".join(labels) if labels else "General overview"
 
 
 # ---------------------------------------------------------------- slides
@@ -264,10 +240,10 @@ def _growth_slide(prs, review, n):
            size=12, row_h=row_h, header_size=12)
     y = 2.05 + row_h * (len(rows) + 1) + 0.15
     _, tf = _textbox(slide, MARGIN, Inches(y), CONTENT_W, Inches(6.9 - y))
-    _bullets(tf, [clip(t, 200) for t in v["notes"]] + ["All figures are estimates per year, scaled from your "
-                                                      "own current data; ranges run from low to high."],
-             12, GREY, 3, bullet="", first=True)
-    _notes(slide, review.growth.get("what_to_say", ""))
+    std = "All figures are estimates per year, scaled from your own current data; ranges run from low to high."
+    items = (v["notes"][:2] + [std]) if len(v["notes"]) > 2 else (v["notes"] + [std])  # at most 3 bullets
+    _bullets(tf, [clip(t, 200) for t in items], 12, GREY, 3, bullet="", first=True)
+    _notes(slide, review.growth.get("what_to_say") or "")
 
 
 def _exec_summary(prs, review, n):
@@ -299,12 +275,6 @@ def _exec_summary(prs, review, n):
         if r is not None and r.value is not None:
             _, tf = _textbox(slide, Inches(8.2), Inches(4.4), Inches(4.55), Inches(0.6))
             _run(tf.paragraphs[0], f"Repairs completed: {fmt_value(r)} {tag(r)}", 13, True, NAVY)
-
-
-def _top_kpis(review, n=8):
-    """First n headline KPIs (the review already orders headline-first, then by priority)."""
-    return [k for k in _customer_kpis(review)
-            if k.display.get("headline") and k.value is not None][:n]
 
 
 def _kpi_slide(prs, review, n):
@@ -465,7 +435,7 @@ def build_pptx(review, out_path: Path) -> Path:
     prs.slide_width, prs.slide_height = SLIDE_W, SLIDE_H
     _cover(prs, review)
     steps = [_story_slide, _exec_summary, _kpi_slide, _footprint_slide, _diy_slide]
-    if review.growth:
+    if growth_view(review):
         steps.append(_growth_slide)
     steps += [_site_slide, _obs_slide, _discussion_slide, _method_slide, _appendix_slide]
     for i, fn in enumerate(steps, start=2):

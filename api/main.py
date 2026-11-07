@@ -218,11 +218,12 @@ XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 EXPORT_FORMATS = {"pptx": PPTX_MIME, "pdf": "application/pdf", "xlsx": XLSX_MIME}
 
 
-def _build_export(review_model, fmt: str) -> bytes:
+def _build_export(review_model, fmt: str, audience: str = "kam") -> bytes:
     from export.pdf_builder import build_pdf
     from export.pptx_builder import build_pptx
     from export.xlsx_builder import build_xlsx
-    build = {"pptx": build_pptx, "pdf": build_pdf, "xlsx": build_xlsx}[fmt]
+    build = {"pptx": build_pptx, "pdf": build_pdf,
+             "xlsx": lambda r, p: build_xlsx(r, p, audience=audience)}[fmt]
     with tempfile.TemporaryDirectory(prefix="vr_export_") as tmp:
         return build(review_model, Path(tmp) / f"review.{fmt}").read_bytes()
 
@@ -235,9 +236,10 @@ def export(req: ExportRequest):
         params = ReviewParams(**req.model_dump(exclude={"format"}))
     except ValueError as e:
         raise HTTPException(422, str(e))
-    data = _build_export(_review(params), req.format)
+    data = _build_export(_review(params), req.format, params.audience)
+    suffix = "_internal" if req.format == "xlsx" and params.audience != "customer" else ""
     return Response(data, media_type=EXPORT_FORMATS[req.format], headers={
-        "Content-Disposition": f'attachment; filename="review_{params.account_id}_{params.period}.{req.format}"'})
+        "Content-Disposition": f'attachment; filename="review_{params.account_id}_{params.period}{suffix}.{req.format}"'})
 
 
 @app.get("/data-quality")

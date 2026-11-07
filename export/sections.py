@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from export.format import fmt_number, fmt_range, fmt_value
 
+WARN = "⚠"
 PRIORITY_LABEL = {"water": "Water", "emissions": "Emissions", "cost": "Cost & utilisation",
                   "circularity": "Circularity", "service": "Service quality"}
 # Site highlight metric per first priority; the bool says "lowest first" is the interesting end.
@@ -18,6 +19,36 @@ SITE_METRIC = {"water": ("washed_kg_per_wearer", False), "emissions": ("co2_savi
 NET_PROMPT = "Enter the contract price to see the net comparison"
 NOT_IN_TOTAL = "explanatory, not in total"
 SOURCE_LABEL = {"default": "Default", "kam": "Entered by account manager"}
+
+
+def tag(metric) -> str:
+    return f"[{metric.method_status.value}]" + (f" {WARN}" if metric.dq_warning else "")
+
+
+def _no_internal(text: str) -> str:
+    """Drop clauses that mention internal-only metrics (the deck is customer-facing)."""
+    parts = [t for t in str(text).replace(";", ".").split(".") if t.strip() and "idle stock" not in t.lower()]
+    parts = [t.strip()[0].upper() + t.strip()[1:] for t in parts]
+    return ". ".join(parts) + ("." if parts else "")
+
+
+def _customer_kpis(review):
+    return [k for k in review.kpis if k.customer_facing]
+
+
+def _no_data(review) -> bool:
+    return not any(k.value is not None for k in _customer_kpis(review))
+
+
+def _focus_text(review) -> str:
+    labels = [PRIORITY_LABEL.get(p, p.title()) for p in review.context.active_priorities[:3]]
+    return ", ".join(labels) if labels else "General overview"
+
+
+def _top_kpis(review, n=8):
+    """First n headline KPIs (the review already orders headline-first, then by priority)."""
+    return [k for k in _customer_kpis(review)
+            if k.display.get("headline") and k.value is not None][:n]
 
 
 def status_text(m) -> str:
@@ -119,7 +150,7 @@ GROWTH_COLUMNS = [("diy_cost_avoided", "Cost avoided per year"), ("staff_hours_f
 def growth_view(review) -> dict | None:
     """Lever table: [lever label, (value, range) per GROWTH_COLUMNS...]; None without growth."""
     g = review.growth
-    if not g:
+    if not g or not g.get("levers"):  # nothing to size (e.g. only already-used service lines)
         return None
 
     def cells(src):
@@ -140,5 +171,5 @@ def growth_view(review) -> dict | None:
         word = "less" if net.value >= 0 else "more"
         notes.append(f"Including the Lindström expansion price, the service would cost "
                      f"{fmt_number(abs(net.value), net.unit)} {word} than doing it yourself.")
-    return {"rows": rows, "notes": notes, "statement": g.get("statement") or g.get("narrative_line", ""),
+    return {"rows": rows, "notes": notes, "statement": g.get("statement") or g.get("narrative_line") or "",
             "columns": [c for _, c in GROWTH_COLUMNS]}

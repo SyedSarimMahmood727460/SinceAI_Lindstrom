@@ -22,8 +22,8 @@ from reportlab.platypus import (BaseDocTemplate, Frame, Image, KeepTogether, Pag
 
 from export import charts
 from export.format import fmt_number, fmt_range, fmt_value
-from export.pptx_builder import _customer_kpis, _focus_text, _no_data, _no_internal, _top_kpis, tag
-from export.sections import PRIORITY_LABEL, diy_view, growth_view, site_groups
+from export.sections import (PRIORITY_LABEL, _customer_kpis, _focus_text, _no_data, _no_internal, _top_kpis,
+                             diy_view, growth_view, site_groups, tag)
 
 NAVY = colors.HexColor("#1B2A4A")
 RED = colors.HexColor("#D71920")
@@ -373,7 +373,7 @@ def build_pdf(review, out_path: Path) -> Path:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     story = [NextPageTemplate("page")] + _cover(review, st)
     parts = [_story, _exec, _kpis, _footprint, _diy]
-    if review.growth:
+    if growth_view(review):
         parts.append(_growth)
     parts += [_sites, _observations, _discussion, _method, _appendix]
     for fn in parts:

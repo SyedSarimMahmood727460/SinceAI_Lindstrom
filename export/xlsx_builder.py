@@ -11,8 +11,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from export.format import fmt_range, fmt_value
-from export.pptx_builder import _focus_text, _no_internal
-from export.sections import NET_PROMPT, NOT_IN_TOTAL, SOURCE_LABEL, diy_view, growth_view
+from export.sections import _focus_text, _no_internal, NET_PROMPT, NOT_IN_TOTAL, SOURCE_LABEL, diy_view, growth_view
 
 HEAD_FILL = PatternFill("solid", fgColor="1B2A4A")
 HEAD_FONT = Font(bold=True, color="FFFFFF")
@@ -51,21 +50,25 @@ def _metric_row(label, m, *extra):
             "yes" if m.dq_warning else ""]
 
 
-def build_xlsx(review, out_path: Path) -> Path:
+def build_xlsx(review, out_path: Path, audience: str = "kam") -> Path:
     wb = Workbook()
     wb.remove(wb.active)
     m = review.meta
+    gv = growth_view(review)
     disc = m.disclaimer
 
     # Summary
-    rows = [["Disclaimer", disc], ["Customer", m.node.name], ["Industry", m.node.industry or ""],
+    rows = [["Disclaimer", disc],
+            ["Audience", "Customer" if audience == "customer"
+             else "Account manager (internal — may include internal metrics)"],
+            ["Customer", m.node.name], ["Industry", m.node.industry or ""],
             ["Period", m.period], ["Comparison baseline", m.baseline.get("name", "")],
             ["Sensitivity", m.sensitivity], ["Focus", _focus_text(review)],
             ["Service line", m.service_line or ", ".join(m.service_lines) or ""],
             ["Run id", m.run_id], ["Generated at", m.generated_at.isoformat(timespec="seconds")],
             ["Assumption set version", m.assumption_set_version],
             ["Sheets", "Story, KPIs, Sites, Observations, Actions, DIY comparison, "
-                       + ("Growth, " if review.growth else "") + "Inputs, Assumptions, Data quality"]]
+                       + ("Growth, " if gv else "") + "Inputs, Assumptions, Data quality"]]
     ws = _sheet(wb, "Summary", ["Item", "Value"], rows, [28, 90], disc)
     ws["A2"].font = ws["B2"].font = Font(bold=True, color="D71920")
 
@@ -132,7 +135,7 @@ def build_xlsx(review, out_path: Path) -> Path:
            diy_rows, [52, 10, 16, 16, 16, 16, 10, 18, 14, 12], disc)
 
     # Growth
-    if review.growth:
+    if gv:
         g = review.growth
         grows = []
         for lv in [*g["levers"], {"label": "Total", **(g.get("totals") or {})}]:
@@ -142,7 +145,6 @@ def build_xlsx(review, out_path: Path) -> Path:
                     lo, base, hi = _ends(mr)
                     grows.append([lv["label"], mr.label.split(" — ")[0], mr.value, lo, base, hi, mr.unit,
                                   fmt_value(mr), mr.method_status.value])
-        gv = growth_view(review)
         for note in [gv["statement"], *gv["notes"]]:
             grows.append([note] + [""] * 8)
         _sheet(wb, "Growth", ["Lever", "Measure (per year)", "Value", "Low", "Base", "High", "Unit",
@@ -152,7 +154,7 @@ def build_xlsx(review, out_path: Path) -> Path:
     inputs = [[i["label"], i["key"], i["value"], i.get("low"), i.get("high"), i.get("unit", ""),
                SOURCE_LABEL.get(i.get("source"), str(i.get("source"))), i.get("entered_at") or "",
                i.get("assumption_id") or ""] for i in (d.inputs if d else []) if i.get("value") is not None]
-    if review.growth:
+    if gv:
         gi = review.growth.get("inputs", {})
         for key, label, unit in (("extra_sites", "Extra sites", "sites"), ("extra_wearers", "Extra employees", "people"),
                                  ("expansion_price_eur_per_site_year", "Expansion price", "EUR/site/year")):

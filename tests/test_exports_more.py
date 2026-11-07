@@ -155,7 +155,8 @@ def test_export_formats_api(pack_path):
         for fmt, mime in mimes.items():
             r = c.post("/reviews/export", json={"account_id": "CUST001", "format": fmt})
             assert r.status_code == 200 and mime in r.headers["content-type"], fmt
-            assert f'review_CUST001_2025.{fmt}"' in r.headers["content-disposition"]
+            name = "review_CUST001_2025_internal.xlsx" if fmt == "xlsx" else f"review_CUST001_2025.{fmt}"
+            assert f'filename="{name}"' in r.headers["content-disposition"]
             bodies[fmt] = r.content
         assert bodies["pdf"][:4] == b"%PDF"
         assert load_workbook(io.BytesIO(bodies["xlsx"])).sheetnames[0] == "Summary"
@@ -180,3 +181,47 @@ def test_pptx_growth_slide_when_inputs(growth_review, tmp_path):
     assert "Add Mats" in g and "4 more sites" in g
     diy = texts[at["Service vs do-it-yourself"]]
     assert fmt_value(growth_review.dto.net) in diy and "explanatory, not in total" in diy
+
+
+def _save(tmp_path, monkeypatch, values):
+    monkeypatch.setenv("VR_INPUTS_DIR", str(tmp_path / "inputs"))
+    save_inputs("CUST001", values, SPEC)
+
+
+def test_growth_without_levers_skips_section(con, tmp_path, monkeypatch):
+    _save(tmp_path, monkeypatch, {"extra_service_lines": ["workwear"]})
+    rv = build_review(con, ReviewParams(account_id="CUST001"))
+    assert rv.growth is not None and rv.growth["levers"] == []
+    assert len(_ppt_texts(build_pptx(rv, tmp_path / "n.pptx"))) == 11
+    assert "Growth opportunities" not in _pdf_text(build_pdf(rv, tmp_path / "n.pdf"))
+    assert "Growth" not in load_workbook(build_xlsx(rv, tmp_path / "n.xlsx")).sheetnames
+    with TestClient(app) as c:
+        for fmt in ("pptx", "pdf", "xlsx"):
+            r = c.post("/reviews/export", json={"account_id": "CUST001", "format": fmt})
+            assert r.status_code == 200, fmt
+
+
+def test_growth_slide_stays_above_footer(con, tmp_path, monkeypatch):
+    from pptx.util import Inches
+    _save(tmp_path, monkeypatch, {"extra_sites": 4, "extra_wearers": 100,
+                                  "extra_service_lines": ["workwear", "mats", "washroom"]})
+    rv = build_review(con, ReviewParams(account_id="CUST001"))
+    assert rv.growth["notes"] and rv.growth["skipped_lines"]
+    prs = Presentation(str(build_pptx(rv, tmp_path / "g.pptx")))
+    assert len(prs.slides) == 12
+    slide = prs.slides[6]
+    assert "Growth opportunities" in [sh.text_frame.text for sh in slide.shapes if sh.has_text_frame]
+    footer_top = Inches(6.98)
+    for sh in slide.shapes:
+        if sh.top < footer_top:
+            assert sh.top + sh.height <= footer_top, sh.name
+    bullets = [sh for sh in slide.shapes if sh.has_text_frame and "All figures are estimates" in sh.text_frame.text]
+    assert len(bullets[0].text_frame.paragraphs) <= 3
+
+
+def test_xlsx_audience_row(con, tmp_path):
+    for aud, expect in (("kam", "Account manager"), ("customer", "Customer")):
+        rv = build_review(con, ReviewParams(account_id="CUST001", audience=aud))
+        ws = load_workbook(build_xlsx(rv, tmp_path / f"{aud}.xlsx", audience=aud))["Summary"]
+        rows = {r[0].value: r[1].value for r in ws.iter_rows(min_row=2)}
+        assert rows["Audience"].startswith(expect)
