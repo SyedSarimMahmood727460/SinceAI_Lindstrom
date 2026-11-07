@@ -3,6 +3,9 @@ from pathlib import Path
 
 import pytest
 
+# the existing suite runs on the main pack only; extension tests switch this on explicitly
+os.environ.setdefault("VR_EXTENSIONS", "off")
+
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PACK = (
     "../lindstrom_pack/Lindstrom_SinceAI2026/"

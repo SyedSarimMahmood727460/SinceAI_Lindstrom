@@ -18,7 +18,7 @@ from api.review_model import ReviewParams
 from config.loader import CONFIG_DIR, load_assumptions, load_yaml
 from metrics.engine import Engine
 from model.contracts import ViewSpec
-from model.load import load_pack
+from model.load import load_sources
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "web"
@@ -47,11 +47,7 @@ state = State()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    pack = (ROOT / os.environ.get("VR_PACK_PATH", DEFAULT_PACK)).resolve()
-    if not pack.is_file():
-        raise RuntimeError(f"Data pack not found at {pack}. Set VR_PACK_PATH to the "
-                           "Lindstrom data pack .xlsx file.")
-    state.con = load_pack(pack, inject_bad=os.environ.get("VR_INJECT_BAD_ROWS") == "1")
+    state.con = load_sources(inject_bad=os.environ.get("VR_INJECT_BAD_ROWS") == "1")
     state.engine = Engine(state.con, load_assumptions(), load_yaml("metrics.yaml"))
     yield
     state.con.close()

@@ -6,10 +6,11 @@ requires-python = ">=3.12"
 dependencies = [
     "pandas", "openpyxl", "duckdb", "pydantic>=2", "PyYAML", "fastapi",
     "uvicorn", "python-pptx", "matplotlib", "anthropic", "httpx",
+    "reportlab",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "pypdf"]
 
 [build-system]
 requires = ["setuptools>=68"]

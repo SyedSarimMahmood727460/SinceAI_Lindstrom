@@ -1,0 +1,3 @@
+sources:
+  - {id: excel_pack, adapter: excel, path: "${VR_PACK_PATH}", enabled: true}
+  - {id: extension_pack, adapter: csv, path: data/extension_pack, enabled: true, toggle_env: VR_EXTENSIONS}

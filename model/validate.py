@@ -74,9 +74,32 @@ def _reasons(name: str, df: pd.DataFrame, frames: dict[str, pd.DataFrame]) -> pd
     return out
 
 
+DIM_KEYS = {"org_node": "node_id", "product": "product_id", "laundry": "laundry_id"}
+
+
+def _dedupe_dimensions(frames: dict[str, pd.DataFrame], bad_rows: list[dict]) -> dict[str, pd.DataFrame]:
+    """A dimension id already supplied by an earlier source is quarantined (first source wins)."""
+    out = dict(frames)
+    for name, key in DIM_KEYS.items():
+        df = frames[name]
+        if "_source_id" in df.columns:
+            first = df.groupby(key)["_source_id"].first()
+            dup = df["_source_id"].notna() & (df["_source_id"] != df[key].map(first))
+            for idx in df.index[dup]:
+                bad_rows.append({
+                    "table": name,
+                    "row_json": json.dumps(df.loc[idx].to_dict(), default=str, ensure_ascii=False),
+                    "reason": f"duplicate key from source {df.loc[idx, '_source_id']}",
+                })
+            df = df[~dup].reset_index(drop=True)
+        out[name] = df.drop(columns=["_source_id"], errors="ignore")
+    return out
+
+
 def validate_frames(frames: dict[str, pd.DataFrame]) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
-    valid = dict(frames)
     bad_rows: list[dict] = []
+    frames = _dedupe_dimensions(frames, bad_rows)
+    valid = dict(frames)
     for name in RULES:
         df = frames[name]
         reasons = _reasons(name, df, frames)
