@@ -62,6 +62,24 @@ const tagLabels = tags => (tags || []).map(t => PRI[t] || t).join(', ');
 let MODE = 'simple';
 const setMode = m => { MODE = m === 'expert' ? 'expert' : 'simple'; };
 const isSimple = () => MODE === 'simple';
+
+// Plain-language step-3 headline: "<site> washes more per wearer than your other sites".
+// Direction comes from comparing the site's value with the typical one (display wording only).
+const SITE_PHRASES = {
+  washed_kg_per_wearer: ['washes more per wearer', 'washes less per wearer'],
+  utilisation: ['uses a larger share of its garments', 'uses a smaller share of its garments'],
+  on_time_rate: ['gets more deliveries on time', 'gets fewer deliveries on time'],
+  service_requests_per_100w: ['raises more service requests', 'raises fewer service requests'],
+  repairs_per_100w: ['needs more repairs', 'needs fewer repairs'],
+};
+function siteHeadline(f, metricId) {
+  const higher = f.value >= f.typical;
+  const p = SITE_PHRASES[metricId];
+  if (p) return `${f.site_name} ${higher ? p[0] : p[1]} than your other sites`;
+  const label = String(f.metric_label || 'this measure');
+  const lower = /^[A-Z]{2}/.test(label) ? label : label.charAt(0).toLowerCase() + label.slice(1);
+  return `${f.site_name}: ${lower} is ${higher ? 'higher' : 'lower'} than at your other sites`;
+}
 /** Range line for a metric ('' when the metric has no range): 'about X (between A and B)'. */
 const rangeText = m => (!m || !m.range ? '' : fmtAbout(m));
 
@@ -327,7 +345,7 @@ const MEET = {
     const f = c && c.facts, tiles = [];
     // a short headline; the full statement is the lead line under it
     const head = f && f.site_name && f.value != null && f.typical != null
-      ? `${f.site_name}: ${f.metric_label} ${f.value >= f.typical ? 'above' : 'below'} your other sites`
+      ? siteHeadline(f, (c.value_refs || [])[0])
       : obs[0].title.replace(' (relative)', '');
     if (f && f.value != null && f.typical != null) {
       const site = R.sites.find(s => s.name === f.site_name), mid = (c.value_refs || [])[0];
