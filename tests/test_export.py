@@ -36,15 +36,15 @@ def deck(review, tmp_path_factory):
     return build_pptx(review, tmp_path_factory.mktemp("deck") / "r.pptx")
 
 
-def test_pptx_has_nine_slides(deck):
-    assert len(Presentation(str(deck)).slides) == 9
+def test_pptx_has_eleven_slides(deck):
+    assert len(Presentation(str(deck)).slides) == 11
 
 
 def test_pptx_numbers_match_review(review, deck):
     kpi = next(k for k in review.kpis if k.metric_id == "co2_saving_kg")
     texts = _slides_text(deck)
-    assert fmt_value(kpi) in texts[2]
-    assert "[ESTIMATED]" in texts[2]
+    assert fmt_value(kpi) in texts[3]
+    assert "[ESTIMATED]" in texts[3]
 
 
 def test_pptx_footer_on_every_slide(review, deck):
@@ -61,7 +61,7 @@ def test_pptx_unicode_site_names(deck):
 
 
 def test_kpi_slide_uses_headline_kpis(review, deck):
-    kpi_text = _slides_text(deck)[2]
+    kpi_text = _slides_text(deck)[3]
     shown = [k for k in review.kpis if k.customer_facing and k.display["headline"]][:8]
     assert len(shown) == 8
     positions = [kpi_text.index(k.label) for k in shown]
@@ -92,7 +92,7 @@ def test_pptx_empty_filter(con, tmp_path):
     rv = build_review(con, ReviewParams(account_id="CUST002", product="P1004"))
     path = build_pptx(rv, tmp_path / "e.pptx")
     texts = _slides_text(path)
-    assert len(texts) == 9 and "No data for this filter" in texts[2]
+    assert len(texts) == 11 and "No data for this filter" in texts[3]
 
 
 def test_pptx_appendix_names_laundry_and_period(con, tmp_path):

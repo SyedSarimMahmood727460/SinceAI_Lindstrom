@@ -214,25 +214,30 @@ class ExportRequest(ReviewParams):
     format: str = "pptx"
 
 
-def _build_pptx(review_model) -> bytes | None:
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+EXPORT_FORMATS = {"pptx": PPTX_MIME, "pdf": "application/pdf", "xlsx": XLSX_MIME}
+
+
+def _build_export(review_model, fmt: str) -> bytes:
+    from export.pdf_builder import build_pdf
     from export.pptx_builder import build_pptx
-    with tempfile.TemporaryDirectory(prefix="vr_pptx_") as tmp:
-        return build_pptx(review_model, Path(tmp) / "review.pptx").read_bytes()
+    from export.xlsx_builder import build_xlsx
+    build = {"pptx": build_pptx, "pdf": build_pdf, "xlsx": build_xlsx}[fmt]
+    with tempfile.TemporaryDirectory(prefix="vr_export_") as tmp:
+        return build(review_model, Path(tmp) / f"review.{fmt}").read_bytes()
 
 
 @app.post("/reviews/export")
 def export(req: ExportRequest):
-    if req.format != "pptx":
+    if req.format not in EXPORT_FORMATS:
         raise HTTPException(400, f"unsupported format: {req.format}")
     try:
         params = ReviewParams(**req.model_dump(exclude={"format"}))
     except ValueError as e:
         raise HTTPException(422, str(e))
-    data = _build_pptx(_review(params))
-    if data is None:
-        raise HTTPException(501, "PPTX export is not available yet")
-    return Response(data, media_type=PPTX_MIME, headers={
-        "Content-Disposition": f'attachment; filename="review_{params.account_id}_{params.period}.pptx"'})
+    data = _build_export(_review(params), req.format)
+    return Response(data, media_type=EXPORT_FORMATS[req.format], headers={
+        "Content-Disposition": f'attachment; filename="review_{params.account_id}_{params.period}.{req.format}"'})
 
 
 @app.get("/data-quality")
