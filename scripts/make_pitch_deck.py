@@ -28,7 +28,8 @@ from pptx import Presentation  # noqa: E402
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN  # noqa: E402
 from pptx.util import Emu, Inches, Pt  # noqa: E402
 
-from export.format import fmt_number, fmt_range, fmt_value  # noqa: E402
+from export.format import (  # noqa: E402
+    fmt_compact, fmt_compact_range, fmt_compact_value, fmt_range, fmt_value)
 from export.pptx_builder import (  # noqa: E402
     CONTENT_W, GREY, INK, LIGHT, MARGIN, NAVY, RED, SLIDE_H, SLIDE_W, WHITE, _rect, _run, _table,
     _textbox, clip)
@@ -39,8 +40,10 @@ DISCLAIMER = "Prototype · synthetic data · not audited"
 BODY = 14  # minimum font size anywhere on a slide
 ACCOUNT = "CUST001"
 # The demo scenario a KAM types in (docs/demo_script.md uses the same values).
-DEMO_INPUTS = {"contract_price_eur_per_year": 1_200_000, "extra_sites": 4,
-               "extra_service_lines": ["mats", "workwear"]}
+# The contract price is what "Load demo scenario" computes for NorthStar: 60% of its base
+# do-it-yourself total (€1.96M), rounded to €10,000.
+DEMO_INPUTS = {"contract_price_eur_per_year": 1_170_000, "extra_sites": 4,
+               "extra_service_lines": ["mats"]}
 FIT_ROWS = 8  # Lindström assets on slide 2 (the brief row is on slide 1)
 ASKED = [  # rows of config/lindstrom_fit.yaml brief_map shown on slide 1, in this order
     "Customer-level managerial view with site drill-down",
@@ -243,37 +246,63 @@ def _s2_fit(prs, d, n):
 
 
 def _s3_story(prs, d, n):
-    r = d["plain"]
+    r, dm = d["plain"], d["review"]
     cards = {c["id"]: c for c in r.story}
     water, co2 = _kpi(r, "water_saving_l"), _kpi(r, "co2_saving_kg")
-    s = _slide(prs, "Easy to explain: the customer story", n,
-               f"The landing page a KAM reads out. {r.meta.node.name} (synthetic), "
-               f"{r.meta.period}, vs {r.meta.baseline.get('name', '').lower()}.")
-    w = Inches(5.95)
-    _tile(s, MARGIN, Inches(1.65), w, Inches(1.05), "Water saved (estimate)", fmt_value(water),
-          f"range {fmt_range(water)}")
-    _tile(s, MARGIN + w + Inches(0.23), Inches(1.65), w, Inches(1.05), "CO₂e avoided (estimate)",
-          fmt_value(co2), f"range {fmt_range(co2)}")
-    rel = (cards.get("value_delivered") or {}).get("relatable")
-    if rel:
-        _, tf = _textbox(s, MARGIN, Inches(2.78), CONTENT_W, Inches(0.55))
-        _run(tf.paragraphs[0], rel, BODY, False, GREY, italic=True)
-    for i, cid in enumerate(("biggest_improvement", "whats_next")):
-        c = cards.get(cid)
-        if not c:
-            continue
-        tf = _box(s, MARGIN + (w + Inches(0.23)) * i, Inches(3.4), w, Inches(3.4))
-        _heading(tf, c["title"], first=True)
-        _run(tf.add_paragraph(), clip(c["statement"], 230), BODY)
-        p = tf.add_paragraph()
-        p.space_before = Pt(8)
-        _run(p, "What to say: ", BODY, True, NAVY)
-        _run(p, c["what_to_say"], BODY, False, INK, italic=True)
-    _notes(s, "This is the first thing a KAM sees. Each card is one sentence with the number, a range, "
-              "a relatable comparison (sourced, labelled illustrative) and a talking point to read "
-              "out. Simple mode is the default: one 'estimate' pill and 'about X (between A and B)'. "
-              "Expert mode shows status badges, formulas and lineage for the sustainability team.\n"
-              + "\n".join(f"{c['title']}: {c['statement']}" for c in r.story))
+    dto, g = dm.dto, dm.growth
+    hrs = dto.convenience.get("staff_hours_freed")
+    best = (cards.get("biggest_improvement") or {}).get("facts") or {}
+    t = g["totals"]
+    s = _slide(prs, "Easy to explain: a guided customer meeting", n,
+               f"Five steps, one message each. {r.meta.node.name} (synthetic), {r.meta.period}, "
+               f"vs {r.meta.baseline.get('name', '').lower()}; the demo scenario is switched on.")
+    steps = [
+        ("1 · What you got",
+         [f"{fmt_compact_value(water)} of water saved", f"{fmt_compact_value(co2)} avoided",
+          f"{fmt_compact_value(hrs)} of staff time freed" if hrs is not None else ""],
+         fmt_compact_range(co2)),
+        ("2 · Vs doing it yourself",
+         [f"About {fmt_compact(dto.net.value, 'EUR')} less with Lindström",
+          f"{fmt_compact_value(dto.diy_total)} do it yourself vs {fmt_compact_value(dto.contract_price)} contract"],
+         fmt_compact_range(dto.net)),
+        ("3 · Where to improve",
+         [f"{best['site_name']}: {best['value']:.0f} kg per wearer",
+          f"Typical across sites: {best['typical']:.0f} kg"] if best else ["The site that stands out, in one sentence"],
+         "One site, one action"),
+        ("4 · Grow together",
+         [f"{g['inputs']['extra_sites']} more sites + Mats",
+          f"{fmt_compact_value(t["diy_cost_avoided"])} avoided a year",
+          f"{fmt_compact_value(t["co2_saving_kg"])} saved"],
+         fmt_compact_range(t["diy_cost_avoided"])),
+        ("5 · Agree next steps",
+         ["Discussion points", "Actions with an owner and a target", "Export: PowerPoint, PDF, Excel"],
+         "Same order in the exports"),
+    ]
+    gap = Inches(0.1)
+    w = int((CONTENT_W - gap * 4) / 5)
+    for i, (head, lines, rng) in enumerate(steps):
+        tf = _box(s, MARGIN + (w + gap) * i, Inches(1.65), w, Inches(3.3))
+        _heading(tf, head, first=True, size=16)
+        for j, line in enumerate(x for x in lines if x):
+            p = tf.add_paragraph()
+            p.space_after = Pt(4)
+            _run(p, line, 18 if j == 0 else BODY, j == 0, NAVY if j == 0 else INK)
+        _run(tf.add_paragraph(), rng, BODY, False, GREY, italic=True)
+    _, tf = _textbox(s, MARGIN, Inches(5.1), CONTENT_W, Inches(1.8))
+    _lines(tf, ["Each step: one message, two or three big numbers, and the sentence to say (What to say, with Copy).",
+                "Steps 2 and 4 never open empty: a KAM-only Load demo scenario button fills example numbers.",
+                "Customer view: no edit controls, no Account intelligence, no internal metrics.",
+                "Expert shows how each figure is calculated; the exports follow the same five steps."],
+           first=True, space=3)
+    _notes(s, "The landing page is a five-step meeting a KAM can run: What you got, Versus doing it "
+              "yourself, Where to improve, Grow together, Agree next steps. Each step has one message, "
+              "two or three big numbers in one compact style (with the range on a second line) and a "
+              "What to say line. The demo scenario button fills an example contract price (60% of the "
+              "do-it-yourself total, rounded to 10,000 euros), four more sites and the Mats service, so "
+              "steps 2 and 4 are never empty; the KAM can edit or reset it. In the customer view the "
+              "edit controls, the intelligence page and internal metrics are hidden. PowerPoint, PDF and "
+              "Excel follow the same five steps; the coaching lines are in the PowerPoint speaker notes "
+              "only.\n" + "\n".join(f"{c['title']}: {c['statement']}" for c in r.story))
 
 
 def _s4_more(prs, d, n):

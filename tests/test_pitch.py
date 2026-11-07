@@ -6,13 +6,13 @@ from pptx.util import Pt
 
 from api.build import build_review
 from api.review_model import ReviewParams
-from export.format import fmt_range, fmt_value
+from export.format import fmt_compact_range, fmt_compact_value, fmt_value
 from model.inputs_store import inputs_dir
 
 TITLES = [
     "What you asked",
     "Built on Lindström's work",
-    "Easy to explain: the customer story",
+    "Easy to explain: a guided customer meeting",
     "Save more by working with us more",
     "Knows where your customers are going",
     "Credible by design",
@@ -68,7 +68,12 @@ def test_pitch_deck(tmp_path, con, pack_path):
     k = {x.metric_id: x for x in r.kpis}
     story = " ".join(_texts(slides[2]))
     for mid in ("water_saving_l", "co2_saving_kg"):
-        assert fmt_value(k[mid]) in story and fmt_range(k[mid]) in story
+        assert fmt_compact_value(k[mid]) in story
+    assert fmt_compact_range(k["co2_saving_kg"]) in story
+    assert "About €788k less with Lindström" in story  # demo contract price: 60% of the DIY total
+    for step in ("1 · What you got", "2 · Vs doing it yourself", "3 · Where to improve",
+                 "4 · Grow together", "5 · Agree next steps"):
+        assert step in story
     assert fmt_value(r.dto.diy_total) in " ".join(_texts(slides[3]))
     # slide 5 cites the committed Fazer snapshot; slide 6 names the L003 warning
     intel = " ".join(_texts(slides[4]))

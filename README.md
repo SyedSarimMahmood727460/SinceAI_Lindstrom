@@ -2,11 +2,11 @@
 
 Value Review is a prototype Customer Value & Sustainability Review generator for the Lindström × Since AI 2026 challenge. It turns multi-site service, laundry, repair and waste data into a dynamic review that a key account manager (KAM) can tailor to a customer's priorities, explain in plain language and export as PowerPoint, PDF or Excel.
 
-**Status: prototype. All data is synthetic (the Lindström × Since AI data pack, plus a synthetic extension pack). Nothing here is audited.** The disclaimer `Prototype · synthetic data · not audited` is shown on the web banner, on every PPTX slide and PDF page, in the Excel Summary sheet, on every pitch-deck slide and in `ReviewModel.meta.disclaimer`.
+**Status: prototype. All data is synthetic (the Lindström × Since AI data pack, plus a synthetic extension pack). Nothing here is audited.** The disclaimer `Prototype · synthetic data · not audited` is shown in the web strip under the header, on every PPTX slide and PDF page, in the Excel Summary sheet, on every pitch-deck slide and in `ReviewModel.meta.disclaimer`.
 
 What it does:
 
-- **Customer story** (the landing page): plain-language cards with the number, a range, a sourced comparison (for example households' yearly water use, labelled illustrative) and a "What to say" line for the KAM. A **Simple / Expert** toggle (default Simple) hides or shows status badges, z-scores, formulas and lineage. Glossary tooltips explain terms such as baseline, allocation, Scope 3 and utilisation.
+- **Guided meeting** (the landing page): five steps, each with one message, two or three big numbers in one compact style (`€1.96M`, `255 t CO₂e`, `1,152 h`) with the range on a second line, and a "What to say" line for the KAM: **1 What you got · 2 Vs doing it yourself · 3 Where to improve · 4 Grow together · 5 Agree next steps**. The header keeps Customer, Period and Compare-with in view; **Ask** (prompt and chips), **Settings** (product, service line, sensitivity, audience, detail) and **Export** sit beside them. Navigation: Meeting · Before the meeting (Account intelligence, KAM only) · Detail · Trust. A KAM-only **Load demo scenario** button on steps 2 and 4 fills example numbers so neither step opens empty: a contract price of 60% of the account's base do-it-yourself total rounded to €10,000 (NorthStar: €1,170,000, "About €788k less with Lindström"), 4 more sites and the Mats service (Washroom if the account already uses Mats). It merges with any stored inputs; **Reset** clears them. The customer audience shows no edit controls, no Account intelligence and no internal metrics. A **Simple / Expert** toggle (default Simple) hides or shows status badges, z-scores, formulas and lineage. Glossary tooltips explain terms such as baseline, allocation, Scope 3 and utilisation.
 - Dashboard with customer-level totals and site drill-down, filters for period (2025 or a quarter), product, service line, baseline (local laundry, home washing, in-house laundry), sensitivity (low/base/high) and audience (KAM or customer).
 - **Service vs do-it-yourself**: cost, convenience and environment against the selected alternative. The KAM can overwrite the defaults ("Your numbers", assumptions T4–T11) and type the contract price. The net comparison appears only when a contract price is entered.
 - **Growth opportunities**: the extra value if the customer adds more sites, more employees or a service line it does not use yet, sized from the customer's own data and the service catalogue.
@@ -80,15 +80,15 @@ In the app: **Export ▾** → PowerPoint · PDF · Excel.
 
 | Format | Content |
 |---|---|
-| PowerPoint | Cover, customer story, executive summary, KPIs, footprint, service vs do-it-yourself, growth (when a scenario is entered), sites, observations, discussion and actions, methodology, data-readiness appendix. |
+| PowerPoint | Cover, then the five meeting steps (What you got, Vs doing it yourself, Where to improve, Grow together when a scenario is entered, Next steps), then an appendix: value KPIs, footprint, site highlights, methodology and assumptions, data readiness. Coaching lines are in the speaker notes only. |
 | PDF | The same sections, rendered server-side with reportlab. It uses DejaVu Sans so that Ł, ó, ä, ö, å and õ render. Same charts; footer with the disclaimer and run id. |
-| Excel | `Summary` (meta, baseline, sensitivity, priorities, audience, disclaimer), `Story`, `KPIs` (value, low, base, high, status, provenance, confidence, assumptions, formula), `Sites`, `Observations`, `Actions`, `DIY comparison`, `Growth` (when a scenario is entered), `Inputs`, `Assumptions`, `Data quality`. Numbers are stored as numbers, with units in the headers. |
+| Excel | `Meeting` (the five steps), `Summary` (meta, baseline, sensitivity, priorities, audience, disclaimer), `Story`, `KPIs` (value, low, base, high, status, provenance, confidence, assumptions, formula), `Sites`, `Observations`, `Actions`, `DIY comparison`, `Growth` (when a scenario is entered), `Inputs`, `Assumptions`, `Data quality`. Numbers are stored as numbers, with units in the headers. |
 
 All three respect the audience: the customer version contains no internal-only metric (for example idle stock value).
 
 ### Pitch deck
 
-`docs/pitch/ValueReview_pitch.pptx` (8 slides, 16:9) is generated by `python scripts/make_pitch_deck.py`. Every figure in it comes from `build_review` and the shared formatters in `export/format.py`. The demo scenario (an example contract price and a growth scenario) is written to a temp `VR_INPUTS_DIR`, never into the repository. Slide 5 uses the committed Fazer snapshot with its sources. The speaker notes carry the talk track.
+`docs/pitch/ValueReview_pitch.pptx` (8 slides, 16:9) is generated by `python scripts/make_pitch_deck.py`. Every figure in it comes from `build_review` and the shared formatters in `export/format.py`. The demo scenario (an example contract price and a growth scenario) is written to a temp `VR_INPUTS_DIR`, never into the repository. Slide 3 describes the five-step meeting with the demo-scenario figures. Slide 5 uses the committed Fazer snapshot with its sources. The speaker notes carry the talk track.
 
 ## Tests
 
@@ -141,7 +141,7 @@ docs/       methodology.md, data_readiness.md, demo_script.md, architecture.md, 
 
 - [Methodology note](docs/methodology.md): baselines, boundary, allocation, sensitivity, repair range, wearer de-duplication, the L003 finding, the service vs do-it-yourself and growth formulas, inputs T3–T16, relatable comparisons, the AI intel guardrails, limitations.
 - [Data readiness note](docs/data_readiness.md): field to future source to gap table (including service line and industry master data, contract prices and CRM legal names), Tier 0–3 roadmap, how to add an adapter.
-- [Demo script](docs/demo_script.md): 4-minute walkthrough with exact clicks and talking points per judging criterion.
+- [Demo script](docs/demo_script.md): 4-minute walkthrough of the five-step meeting (load the demo scenario, steps 1–5, export, Expert, built on Lindström's work) with exact clicks and talking points per judging criterion.
 - [Pitch deck](docs/pitch/ValueReview_pitch.pptx): 8 slides, generated by `scripts/make_pitch_deck.py`.
 - [Architecture](docs/architecture.md): three Mermaid diagrams.
 - Design specs: [base](docs/specs/2026-11-06-value-review-design.md), [extensions](docs/specs/2026-11-07-extensions-design.md).
