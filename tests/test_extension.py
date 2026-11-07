@@ -85,6 +85,17 @@ def test_hotel_mats_only_filter(con_ext):
     assert r.meta.service_lines == allr.meta.service_lines  # unfiltered list
 
 
+def test_overview_kpi_row_shows_for_mats_only(con_ext):
+    """The Overview KPI row needs only the always-present core metrics, so a Mats-only filter
+    keeps the row (missing tiles show a dash) instead of hiding it."""
+    from config.loader import CONFIG_DIR
+    mods = json.loads((CONFIG_DIR / "modules.json").read_text(encoding="utf-8"))
+    req = next(m for m in mods if m["id"] == "overview_kpis")["required_metrics"]
+    r = _review(con_ext, account_id="CUST004", service_line="Mats")
+    kpi = {k.metric_id: k for k in r.kpis}
+    assert req and all(kpi[mid].value is not None for mid in req)
+
+
 def test_hotel_workwear_filter_excludes_mats(con_ext):
     r = _review(con_ext, account_id="CUST004", service_line="Workwear")
     assert {k.metric_id: k for k in r.kpis}["active_wearers"].value > 0

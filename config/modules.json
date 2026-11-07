@@ -3,9 +3,7 @@
    "required_metrics": [], "priority_tags": [], "industries": ["*"]},
 
   {"id": "overview_kpis", "pack": "general", "page": "overview", "component": "kpi_row",
-   "required_metrics": ["active_wearers", "sites", "garments_allocated", "utilisation", "on_time_rate",
-                        "service_requests_per_100w", "repairs", "water_saving_l", "co2_saving_kg",
-                        "energy_saving_kwh", "recycling_rate", "postponed_product_kgco2e"],
+   "required_metrics": ["sites", "garments_allocated", "water_saving_l", "co2_saving_kg"],
    "priority_tags": ["water", "emissions", "cost", "circularity", "service"], "industries": ["*"]},
   {"id": "idle_stock", "pack": "financial", "page": "overview", "component": "kpi_row",
    "required_metrics": ["idle_pieces", "idle_stock_value_eur"],
@@ -50,6 +48,24 @@
   {"id": "steering_points", "pack": "general", "page": "steering", "component": "discussion_points",
    "required_metrics": [], "priority_tags": ["water", "emissions", "cost", "circularity", "service"], "industries": ["*"]},
   {"id": "steering_actions", "pack": "general", "page": "steering", "component": "action_table",
+   "required_metrics": [], "priority_tags": [], "industries": ["*"]},
+
+  {"id": "diy_compare", "pack": "financial", "page": "vs_diy", "component": "diy_compare",
+   "required_metrics": [], "priority_tags": [], "industries": ["*"]},
+  {"id": "diy_cost_chart", "pack": "financial", "page": "vs_diy", "component": "diy_cost_chart",
+   "required_metrics": [], "priority_tags": [], "industries": ["*"]},
+  {"id": "diy_inputs", "pack": "financial", "page": "vs_diy", "component": "diy_inputs",
+   "required_metrics": [], "priority_tags": [], "industries": ["*"]},
+
+  {"id": "growth_inputs", "pack": "financial", "page": "growth", "component": "growth_inputs",
+   "required_metrics": [], "priority_tags": [], "industries": ["*"]},
+  {"id": "growth_levers", "pack": "financial", "page": "growth", "component": "growth_levers",
+   "required_metrics": [], "priority_tags": [], "industries": ["*"]},
+
+  {"id": "intel_research", "pack": "general", "page": "intel", "component": "intel_page",
+   "required_metrics": [], "priority_tags": [], "industries": ["*"]},
+
+  {"id": "fit_assets", "pack": "general", "page": "fit", "component": "fit_page",
    "required_metrics": [], "priority_tags": [], "industries": ["*"]},
 
   {"id": "method_boundary", "pack": "general", "page": "methodology", "component": "methodology",

@@ -57,12 +57,13 @@ const tagLabels = tags => (tags || []).map(t => PRI[t] || t).join(', ');
 
 // ---------- Simple / Expert mode (display only) ----------
 // Simple (default) hides z-scores, method-status / provenance badges (one "estimate" pill instead),
-// lineage and formula text; ranges read "about X (between A and B)". Expert shows everything.
+// lineage and formula text. Ranges read "about X (between A and B)" in both modes (design §8b G9);
+// Expert adds badges, formulas and lineage.
 let MODE = 'simple';
 const setMode = m => { MODE = m === 'expert' ? 'expert' : 'simple'; };
 const isSimple = () => MODE === 'simple';
-/** Range line for a metric in the current mode ('' when the metric has no range). */
-const rangeText = m => (!m || !m.range ? '' : (isSimple() ? fmtAbout(m) : fmtRange(m)));
+/** Range line for a metric ('' when the metric has no range): 'about X (between A and B)'. */
+const rangeText = m => (!m || !m.range ? '' : fmtAbout(m));
 
 // ---------- glossary (config/glossary.yaml via /config/glossary) ----------
 // Each term matches its own name plus the word forms used in the dashboard text.
@@ -157,6 +158,39 @@ function storyRef(R, id) {
   return map[id] || null;
 }
 
+// ---------- helpers for the DIY, growth, intelligence and fit pages ----------
+const INPUT_CONTRACT = 'contract_price_eur_per_year';
+/** Results without an /explain endpoint (do-it-yourself, growth): kept here for the local drawer. */
+const LOCAL = {};
+const resetLocal = () => { Object.keys(LOCAL).forEach(k => { delete LOCAL[k]; }); };
+/** Only http(s) URLs become links; anything else is shown as text. */
+function safeUrl(u) {
+  try { const x = new URL(String(u)); return x.protocol === 'http:' || x.protocol === 'https:' ? x.href : null; } catch (e) { return null; }
+}
+const hostOf = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
+function extLink(url, text) {
+  const u = safeUrl(url);
+  const t = text || (u ? hostOf(u) : url);
+  return u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(t)}</a>` : esc(t);
+}
+const unitText = u => String(u || '').replace(/EUR/g, '€').replace(/\bm3\b/g, 'm³');
+/** One figure: label + badges, then 'about X (between A and B)'. Click opens its explanation. */
+function fig(label, m, node, cls = '') {
+  if (!m) return `<div class="fig ${cls}"><div class="fig-l">${gloss(label)}</div><div class="fig-v">–</div></div>`;
+  let attr;
+  if (m.metric_id && /^(dto|growth)_/.test(m.metric_id)) { LOCAL[m.metric_id] = m; attr = `data-local="${esc(m.metric_id)}"`; }
+  else attr = `data-explain="${esc(m.metric_id)}" data-node="${esc(node)}"`;
+  const spread = m.range && m.range.low != null && m.range.high != null && m.range.low !== m.range.high;
+  const v = m.value == null ? 'No data' : (spread ? fmtAbout(m) : fmtM(m));
+  return `<div class="fig ${cls}" role="button" tabindex="0" ${attr} title="${esc(isSimple() ? 'Click to see what this figure means' : (m.formula_text || ''))}">
+    <div class="fig-l">${gloss(label)} ${badges(m)}</div><div class="fig-v">${esc(v)}</div></div>`;
+}
+const srcBadge = r => (r.source === 'kam'
+  ? `<span class="src kam">entered by account manager${r.entered_at ? `, ${esc(r.entered_at)}` : ''}</span>`
+  : `<span class="src">default${r.assumption_id ? ` (${esc(r.assumption_id)})` : ''}</span>`);
+const rawNum = v => (v == null ? '' : String(v));
+const FIT_KIND = {PUBLIC_REFERENCE: ['PUBLIC', 'b-PUBLIC'], DATA_PACK: ['DATA PACK', 'b-DATAPACK'], BRIEF: ['BRIEF', 'b-BRIEF']};
+
 const Components = {
   // Customer story (G9): plain-language headline cards from review.story; the statements are
   // filled by the engine (insights/story.py), the UI adds no numbers.
@@ -178,7 +212,7 @@ const Components = {
         <div class="say"><div class="say-h">What to say <button class="btn ghost sm" data-copy="${i}" title="Copy the talking point">Copy</button></div>
           <div class="say-t">${gloss(c.what_to_say)}</div></div>
         <div class="story-foot"><span class="story-based">${based}</span>
-          <span class="link" data-detail="${esc(c.detail_view || '')}">Show the detail →</span></div></div>`;
+          <button type="button" class="link" data-detail="${esc(c.detail_view || '')}">Show the detail →</button></div></div>`;
     }).join('');
     return {html: `<div class="story">${html}</div>`};
   },
@@ -218,7 +252,7 @@ const Components = {
       return `<tr class="click" data-site="${esc(s.node_id)}"><td>${esc(s.name.replace(prefix, ''))}<div class="small">${esc(s.country)} · ${esc(s.site_type)}</div></td>
         <td style="width:40%"><div class="bar"><i style="width:${Math.abs(m.value) / mx * 100}%"></i></div></td><td>${esc(fmtM(m))}</td></tr>`; }).join('');
     return {cls: 'w5', html: `<div class="card"><h2>Sites ranked by ${esc(r.l)}</h2><table>${tr}</table>
-      <div class="small" style="margin-top:6px">Showing ${Math.min(10, rows.length)} of ${rows.length}. Open <span class="link" data-go="sites">Sites</span> for all.</div></div>`};
+      <div class="small" style="margin-top:6px">Showing ${Math.min(10, rows.length)} of ${rows.length}. Open <button type="button" class="link" data-go="sites">Sites</button> for all.</div></div>`};
   },
 
   site_table(ctx) {
@@ -272,7 +306,7 @@ const Components = {
         {label: 'Late cycles', data: ser('late_cycles'), backgroundColor: COLORS.red}]}});
     }
     return {charts, html: `<div class="card" id="siteDetail"><h2>${esc(s.name)} <span class="small">· ${esc(s.site_type)} · ${esc(s.city)}, ${esc(s.country)} · laundry ${esc(s.laundry_id)}</span>
-      <span class="link small" style="float:right" data-close-site="1">close</span></h2>
+      <button type="button" class="link small" style="float:right" data-close-site="1">close</button></h2>
       <div class="kpis">${tiles}</div>${obsH}${trendsH}</div>`};
   },
 
@@ -293,7 +327,7 @@ const Components = {
     const ms = ids.map(ctx.kpi), b = ctx.R.meta.baseline.name;
     const max = Math.max(110, ...ms.map(m => (m && m.range ? m.range.high : m && m.value) || 0));
     return {cls: 'w6', html: `<div class="card"><h2>Lindström footprint as % of baseline</h2>${chart('chBase')}
-      <div class="legend">${ms.map(m => `<span>${esc(m.label)}: ${isSimple() ? esc(rangeText(m) || fmtM(m)) : `${esc(fmtM(m))} (${esc(fmtRange(m))})`} ${badges(m)}</span>`).join('')}</div>
+      <div class="legend">${ms.map(m => `<span>${esc(m.label)}: ${esc(rangeText(m) || fmtM(m))} ${badges(m)}</span>`).join('')}</div>
       <div class="legend"><span>${gloss(`Footprint = allocated from laundry level by washed-kg share${isSimple() ? '' : ' (A003)'}. Baseline = washed kg × baseline factor.`)}</span></div></div>`,
     charts: [{id: 'chBase', type: 'bar', data: {labels: ['Water', 'CO₂e (washing + logistics)', 'Energy'], datasets: [
       {label: `${b} = 100`, data: [100, 100, 100], backgroundColor: COLORS.light},
@@ -401,6 +435,181 @@ const Components = {
       ${gaps.map(g => `<tr><td class="l">${esc(g.field)}</td><td class="l">${esc(g.future_source)}</td><td class="l">${esc(g.status)}</td><td class="l">${esc(g.note)}</td></tr>`).join('')}</table></div>
       <div class="card" style="margin-top:12px"><h2>Hidden: missing data</h2>${hiddenH}</div>`};
   },
+
+  // ---- Service vs do-it-yourself (design §8a): review.dto; the engine computes every figure ----
+  diy_compare(ctx) {
+    const d = ctx.R.dto, k = ctx.kpi, node = ctx.R.meta.node.id;
+    if (!d) return {html: '<div class="card empty">No do-it-yourself comparison for this view.</div>'};
+    const bname = ctx.R.meta.baseline.name, customer = ctx.S.audience === 'customer';
+    const kam = (d.inputs || []).some(i => i.source === 'kam');
+    const chip = kam ? '<span class="kchip" title="At least one figure uses a value entered by the account manager (see Your numbers)">✎ uses figures entered by the account manager</span>' : '';
+    const partial = (d.missing_lines || []).length ? `<div class="alert small">The do-it-yourself total is partial: ${esc(d.missing_lines.map(id => (d.lines.find(l => l.id === id) || {}).label || id).join(', '))} could not be sized for this view, so the total is lower than it would be.</div>` : '';
+    const lines = d.lines.map(l => fig(l.in_total ? l.label : `${l.label} (explanatory, not in total)`, l.diy, node, l.in_total ? 'sub' : 'sub muted')).join('');
+    let net;
+    if (d.net) net = fig('Do-it-yourself total minus Lindström contract price', d.net, node, 'hl') + `<div class="small">${d.net.value >= 0 ? 'Positive: doing it yourself would cost more than the service.' : 'Negative: on cost alone, doing it yourself would cost less than the service.'}</div>`;
+    else net = customer ? '' : '<div class="small hint">Enter the contract price in Your numbers to see the net comparison.</div>';
+    const cost = fig(`Do-it-yourself cost (${bname})`, d.diy_total, node, 'hl') + `<div class="figs">${lines}</div>` +
+      (d.contract_price ? fig('Lindström contract price', d.contract_price, node) : '') + net;
+    const c = d.convenience || {};
+    const env = fig('Water saved', k('water_saving_l'), node) + fig('CO₂e avoided', k('co2_saving_kg'), node) + fig('Energy saved', k('energy_saving_kwh'), node) +
+      `<div class="small">Lindström's allocated footprint vs ${esc(bname)} for the same washed kilograms. <button type="button" class="link" data-go="footprint">Footprint detail</button></div>`;
+    const time = fig('Staff hours freed', c.staff_hours_freed, node, 'hl') + fig('On-time delivery', c.on_time_rate, node) +
+      fig('Garment utilisation', c.utilisation, node) + fig('Service requests per 100 wearers', c.service_requests_per_100w, node);
+    const hyg = d.hygiene_note ? `<p>${esc(d.hygiene_note)}</p>` : `<p class="small">No industry-specific hygiene note for ${esc(ctx.R.meta.node.industry)}.</p>`;
+    const col = (t, body) => `<div class="card dcol"><h2>${t}</h2>${body}</div>`;
+    return {html: `<div class="diy-head"><span>Lindström service vs <b>${esc(bname)}</b> · ${esc(ctx.R.meta.period)} · change the comparison in the toolbar</span>${chip}</div>${partial}
+      <div class="dgrid">${col('Environment', env)}${col('Cost', cost)}${col('Time', time)}${col('Hygiene', hyg)}</div>
+      <p class="small">€, hours and CO₂e are shown side by side and never added into one score. Click any figure to see how it is calculated.</p>`};
+  },
+
+  diy_cost_chart(ctx) {
+    const d = ctx.R.dto;
+    if (!d || !d.diy_total || d.diy_total.value == null) return null;
+    const cols = [COLORS.navy, COLORS.blue, COLORS.grey, COLORS.teal, COLORS.orange];
+    const inTot = d.lines.filter(l => l.in_total && l.diy && l.diy.value != null);
+    const cp = d.contract_price && d.contract_price.value != null ? d.contract_price : null;
+    const labels = ['Do it yourself', ...(cp ? ['Lindström contract'] : [])];
+    const ds = inTot.map((l, i) => ({label: l.label, data: [l.diy.value, ...(cp ? [null] : [])], backgroundColor: cols[i % cols.length], stack: 's'}));
+    if (cp) ds.push({label: 'Lindström contract price', data: [null, cp.value], backgroundColor: COLORS.red, stack: 's'});
+    const ex = d.lines.filter(l => !l.in_total);
+    return {cls: 'w5', html: `<div class="card"><h2>Cost breakdown (${esc(ctx.R.meta.period)}, ${esc(ctx.R.meta.sensitivity)} case)</h2>${chart('chDiy', 'sm')}
+      <div class="legend">${ex.map(l => `<span>${esc(l.label)} (${esc(fmtM(l.diy))}) is already reflected in garment purchases: explanatory, not in the total.</span>`).join('')}
+      ${cp ? '' : '<span>No contract price entered, so there is no Lindström bar.</span>'}</div></div>`,
+    charts: [{id: 'chDiy', type: 'bar', data: {labels, datasets: ds}, options: {indexAxis: 'y',
+      scales: {x: {stacked: true, ticks: {callback: v => '€' + num(v / 1000, 0) + 'k'}}, y: {stacked: true}},
+      plugins: {tooltip: {callbacks: {label: c => `${c.dataset.label}: €${num(c.raw, 0)}`}}}}}]};
+  },
+
+  diy_inputs(ctx) {
+    const d = ctx.R.dto;
+    if (!d) return null;
+    const rows = d.inputs || [], spec = ctx.ext.spec || {};
+    if (ctx.S.audience === 'customer') {
+      const tr = rows.filter(r => r.key !== INPUT_CONTRACT || r.value != null).map(r => `<tr><td class="l">${esc(r.label)}</td>
+        <td>${esc(rawNum(r.value))}</td><td>${r.key === INPUT_CONTRACT || r.low === r.high ? '' : `${esc(rawNum(r.low))}–${esc(rawNum(r.high))}`}</td>
+        <td class="l">${esc(unitText(r.unit))}</td><td class="l">${srcBadge(r)}</td></tr>`).join('');
+      return {cls: 'w7', html: `<div class="card"><h2>Figures used in this comparison</h2><table><tr><th class="l">Input</th><th>Value</th><th>Low–high</th><th class="l">Unit</th><th class="l">Source</th></tr>${tr}</table>
+        <p class="small">Defaults are illustrative Nordic values (low confidence) unless your account manager entered your own figures.</p></div>`};
+    }
+    const tr = rows.map(r => {
+      const isC = r.key === INPUT_CONTRACT, s = spec[r.key] || {};
+      const ranged = r.source === 'kam' && !isC && !(r.low === r.value && r.high === r.value);
+      const atDefault = r.value === s.default;
+      const ph = part => (atDefault ? rawNum(s[part]) : '= value');
+      const inp = (part, val, extra) => `<input type="text" inputmode="decimal" autocomplete="off" data-in="${esc(r.key)}" data-part="${part}" value="${esc(val)}" ${extra}>`;
+      return `<tr data-key="${esc(r.key)}"><td class="l"><label for="in_${esc(r.key)}">${esc(r.label)}</label>${r.help ? `<div class="small">${esc(r.help)}</div>` : ''}</td>
+        <td>${inp('value', rawNum(r.value), `id="in_${esc(r.key)}" placeholder="${isC ? 'not entered' : ''}"`)}</td>
+        <td>${isC ? '' : inp('low', ranged ? rawNum(r.low) : '', `placeholder="${esc(ph('low'))}" aria-label="${esc(r.label)}, low"`)}</td>
+        <td>${isC ? '' : inp('high', ranged ? rawNum(r.high) : '', `placeholder="${esc(ph('high'))}" aria-label="${esc(r.label)}, high"`)}</td>
+        <td class="l">${esc(unitText(r.unit))}</td><td class="l">${srcBadge(r)}</td></tr>`;
+    }).join('');
+    return {cls: 'w7', html: `<div class="card"><h2>Your numbers <span class="small">· account manager only</span></h2>
+      <form data-form="diy" novalidate><table class="inputs"><tr><th class="l">Input</th><th>Value</th><th>Low</th><th>High</th><th class="l">Unit</th><th class="l">Source</th></tr>${tr}</table>
+      <div class="form-err" role="alert"></div>
+      <div class="form-row"><button type="submit" class="btn">Save</button><button type="button" class="btn ghost" data-action="diy-reset">Reset to defaults</button></div>
+      <p class="small">Decimal comma or dot both work (2,5 = 2.5). Leave a field blank to use the default. Low/high are optional: an entered value applies to low, base and high unless you also give a range. Saving keeps the growth inputs.</p></form></div>`};
+  },
+
+  // ---- Growth opportunities (design §8b G7): review.growth; per year, account-wide ----
+  growth_inputs(ctx) {
+    const g = ctx.ext.growthStored() || {}, cat = ctx.ext.catalogue || [];
+    const used = new Set(ctx.R.meta.service_lines || []);
+    const chosen = new Set(g.extra_service_lines || []);
+    if (ctx.S.audience === 'customer') {
+      const parts = [];
+      if (g.extra_sites) parts.push(`${num(g.extra_sites)} more site${g.extra_sites === 1 ? '' : 's'}`);
+      if (g.extra_wearers) parts.push(`${num(g.extra_wearers)} more employee${g.extra_wearers === 1 ? '' : 's'} on the service`);
+      cat.filter(c => chosen.has(c.id)).forEach(c => parts.push(`add ${c.name}`));
+      return {cls: 'w4', html: `<div class="card"><h2>Scenario discussed</h2>${parts.length ? `<ul class="tight">${parts.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : '<p class="small">No scenario entered yet.</p>'}
+        ${parts.length ? `<p class="small">Entered by your account manager${g.entered_at ? `, ${esc(g.entered_at)}` : ''}.</p>` : ''}</div>`};
+    }
+    const boxes = cat.map(c => `<label class="cb" title="${esc(c.description)}"><input type="checkbox" data-gline="${esc(c.id)}" ${chosen.has(c.id) ? 'checked' : ''}>
+      ${esc(c.name)}${used.has(c.service_line) ? ' <span class="small">(already used, will be skipped)</span>' : ''}</label>`).join('');
+    const field = (key, label, val, hint) => `<div class="gfield" data-key="${key}"><label for="g_${key}">${label}</label>
+      <input type="text" inputmode="decimal" autocomplete="off" id="g_${key}" data-g="${key}" value="${esc(val ? rawNum(val) : '')}" placeholder="${esc(hint)}"></div>`;
+    return {cls: 'w4', html: `<div class="card"><h2>What could we add?</h2><form data-form="growth" novalidate>
+      ${field('extra_sites', 'Sites not yet served', g.extra_sites, 'e.g. 4')}
+      ${field('extra_wearers', 'Employees not yet on the service', g.extra_wearers, 'e.g. 200')}
+      <div class="gfield" data-key="extra_service_lines"><div class="glabel">Service lines not yet used</div>${boxes || '<span class="small">Service catalogue unavailable.</span>'}</div>
+      ${field('expansion_price_eur_per_site_year', 'Optional: Lindström price per extra site and year (€)', g.expansion_price_eur_per_site_year, 'blank = no net figure')}
+      <div class="form-err" role="alert"></div>
+      <div class="form-row"><button type="submit" class="btn">Size the opportunity</button><button type="button" class="btn ghost" data-action="growth-clear">Clear</button></div>
+      <p class="small">Saved with Your numbers (the do-it-yourself inputs are kept). Typical volumes and prices per service line are illustrative defaults (T12+).</p></form></div>`};
+  },
+
+  growth_levers(ctx) {
+    const g = ctx.R.growth, node = ctx.R.meta.node.id, customer = ctx.S.audience === 'customer';
+    const intro = "<p class=\"small\">Per year, for the whole account, scaled from this customer's own current figures. The product and service-line filters do not apply. Estimates, not a quote.</p>";
+    if (!g) return {cls: 'w8', html: `<div class="card empty">${customer ? 'No growth scenario has been entered for this customer yet.' : 'Enter sites, employees or service lines and press <b>Size the opportunity</b> to see the extra savings.'}</div>`};
+    const cat = {}; (ctx.ext.catalogue || []).forEach(c => { cat[c.id] = c; });
+    const notes = [
+      ...(g.skipped_lines || []).map(s => `${(cat[s.id] || {}).name || s.id}: ${s.reason}`),
+      ...(g.partial ? ['The do-it-yourself total behind these figures is partial, so the € figures are lower than they would be.'] : []),
+      ...(g.notes || [])];
+    const notesH = notes.length ? `<div class="alert small"><ul class="tight">${notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>` : '';
+    if (!g.totals) return {cls: 'w8', html: `${notesH}<div class="card empty">Nothing to size: every chosen service line is already used by this customer.</div>`};
+    const figs = x => fig('Do-it-yourself cost avoided', x.diy_cost_avoided, node, 'hl') +
+      (x.net ? fig('Cost avoided minus Lindström price', x.net, node) : '') +
+      fig('Staff hours freed', x.staff_hours_freed, node) + fig('CO₂e avoided', x.co2_saving_kg, node) + fig('Water saved', x.water_saving_l, node);
+    const cards = g.levers.map(lv => `<div class="card lever"><h2>${esc(lv.label)}</h2>${figs(lv)}
+      ${lv.lindstrom_offer_url ? `<div class="small">${extLink(lv.lindstrom_offer_url, `About the ${(cat[(lv.id || '').replace('line:', '')] || {}).name || 'Lindström'} service`)}</div>` : ''}</div>`).join('');
+    const say = g.narrative_line ? `<div class="say"><div class="say-h">What to say <button type="button" class="btn ghost sm" data-copy-growth="1" title="Copy the line">Copy</button></div>
+      <div class="say-t">${gloss(g.narrative_line)}</div>${g.what_to_say ? `<div class="small" style="margin-top:4px">${esc(g.what_to_say)}</div>` : ''}</div>` : '';
+    return {cls: 'w8', html: `${say}${notesH}${intro}<div class="levers">${cards}</div>
+      ${g.levers.length > 1 ? `<div class="card lever total"><h2>All levers together, per year</h2>${figs(g.totals)}</div>` : ''}`};
+  },
+
+  // ---- Account intelligence (design §8b G8): POST /intel; no engine numbers are mixed in ----
+  intel_page(ctx) {
+    const I = ctx.ext.intel, name = ctx.R.meta.node.name;
+    if (ctx.S.audience === 'customer') return {html: '<div class="card empty">Account intelligence is a preparation tool for the account manager. Switch the audience to KAM to use it.</div>'};
+    const snaps = (I.snapshots || []).map(s => `<button type="button" class="chip ${I.report && I.report.company === s.company ? 'on' : ''}" data-intel-snap="${esc(s.company)}">${esc(s.company)} · snapshot ${esc(s.generated_at)}</button>`).join('');
+    const note = `<div class="note">${esc(name)} is a fictional customer, so there is nothing public to research. Try the example public company${snaps ? ' below' : ''}. In production the account's legal name would come from the CRM.</div>`;
+    const form = `<form data-form="intel" class="intel-form" novalidate>
+      <label class="ctl">Company<input type="text" id="intelCompany" maxlength="200" value="${esc(I.company)}" placeholder="e.g. Fazer Group"></label>
+      <label class="ctl">Website (optional)<input type="text" id="intelWebsite" maxlength="300" value="${esc(I.website)}" placeholder="https://…"></label>
+      <button type="submit" class="btn" ${I.loading ? 'disabled' : ''}>${I.loading ? 'Researching…' : 'Research'}</button></form>
+      ${snaps ? `<div class="chips">Examples: ${snaps}</div>` : ''}`;
+    let body = '';
+    if (I.loading) body = '<div class="card empty">Researching public sources… a live search can take up to a minute.</div>';
+    else if (I.error) body = `<div class="alert"><div class="t">Not available</div><div>${esc(I.error)}</div></div>`;
+    else if (I.report) {
+      const r = I.report, sec = r.sections || {};
+      const mode = r.mode === 'live' ? `<span class="badge b-LIVE">Live</span> <span class="small">researched ${esc(r.generated_at)}</span>`
+        : `<span class="badge b-SNAP">Snapshot from ${esc(r.generated_at)}</span>`;
+      const claims = list => ((list || []).length ? `<ul class="claims">${list.map(c => `<li>${esc(c.text)} <span class="src-link">· ${extLink(c.source_url)}${c.source_date ? `, ${esc(c.source_date)}` : ''}</span></li>`).join('')}</ul>`
+        : '<p class="small">Nothing sourced found.</p>');
+      const helps = (sec.how_lindstrom_helps || []).map(h => { const c = (ctx.ext.catalogue || []).find(x => x.id === h.offer_id);
+        return `<div class="card help"><h2>${esc(h.offer_name)}</h2><p>${esc(h.why)}</p>
+          <div class="small">Based on: ${(h.based_on || []).map(u => extLink(u)).join(', ') || '–'}${c && c.lindstrom_offer_url ? ` · ${extLink(c.lindstrom_offer_url, 'Lindström offer')}` : ''}</div></div>`; }).join('');
+      const starters = (sec.conversation_starters || []).map(s => `<li>${esc(s)}</li>`).join('');
+      const sources = (r.sources || []).map(s => `<li>${extLink(s.url, s.title || s.url)}${s.date ? ` <span class="small">· ${esc(s.date)}</span>` : ''}</li>`).join('');
+      body = `<div class="banner ai">⚠ ${esc(r.disclaimer)}</div>
+        <div class="intel-head"><h2>${esc(r.company)}</h2>${r.website ? `<span class="small">${extLink(r.website)}</span>` : ''} ${mode}</div>
+        <div class="grid c2"><div class="card"><h2>Where they're going</h2>${claims(sec.direction)}</div>
+          <div class="card"><h2>Sustainability &amp; reporting</h2>${claims(sec.sustainability)}</div></div>
+        <div class="card" style="margin-top:12px"><h2>Industry trends</h2>${claims(sec.trends)}</div>
+        <h2 style="margin-top:16px">How Lindström can help</h2><div class="helps">${helps || '<div class="card small">No mapped offers.</div>'}</div>
+        <div class="grid c2" style="margin-top:12px"><div class="card"><h2>Conversation starters</h2><ol class="qs">${starters}</ol></div>
+          <div class="card"><h2>Sources</h2><ol class="sources">${sources}</ol></div></div>`;
+    }
+    return {html: `${note}<div class="card">${form}</div><div style="margin-top:12px">${body}</div>`};
+  },
+
+  // ---- Built on Lindström's work (design §3): config/lindstrom_fit.yaml ----
+  fit_page(ctx) {
+    const F = ctx.ext.fit;
+    if (F === undefined) return {html: '<div class="card empty">Loading…</div>'};
+    if (!F) return {html: '<div class="card empty">Could not load the page content.</div>'};
+    const kind = k => { const [t, c] = FIT_KIND[k] || [k, '']; return `<span class="badge ${c}">${esc(t)}</span>`; };
+    const rows = (F.assets || []).map(a => `<tr><td class="l"><b>${esc(a.asset)}</b></td><td class="l">${esc(a.today)}</td><td class="l">${esc(a.value_review)}</td>
+      <td class="l">${esc(a.brief_line)}</td><td class="l">${kind(a.kind)} ${a.kind === 'PUBLIC_REFERENCE' ? extLink(a.source) : esc(a.source)}</td></tr>`).join('');
+    const brief = (F.brief_map || []).map(b => `<tr><td class="l">${esc(b.asked)}</td><td class="l">${esc(b.where)}</td><td class="l">${b.status === 'done' ? '✅ done' : esc(b.status)}</td></tr>`).join('');
+    return {html: `<div class="alert small">ℹ ${esc(F.note)}</div>
+      <div class="card"><h2>Lindström assets → how Value Review uses or extends them</h2><table class="fit"><tr><th class="l">Lindström asset</th><th class="l">What Lindström has today</th>
+        <th class="l">How Value Review uses or extends it</th><th class="l">Brief line answered</th><th class="l">Source</th></tr>${rows}</table></div>
+      <div class="card" style="margin-top:12px"><h2>What you asked → where it is</h2><table><tr><th class="l">What you asked</th><th class="l">Where it is</th><th class="l">Status</th></tr>${brief}</table></div>`};
+  },
 };
 
 /** Simple mode drops the z-score the engine appends to a finding, e.g. " (z = -1.5)". */
@@ -410,9 +619,9 @@ function obsHtml(o, i, idx) {
   const warn = o.rule_id === 'R8';
   return `<div class="obs ${warn ? 'warn' : ''}"><div class="t">${warn ? '⚠ ' : (i == null ? '' : (i + 1) + '. ')}${esc(o.title)}</div>
     <div class="d">${gloss(plainFinding(o.finding))}</div><div class="a"><b>Next step:</b> ${esc(o.action)}</div>
-    <div class="meta">${badges(o, true)} <span>tags: ${esc(tagLabels(o.tags))}</span> <span class="link" data-evidence="${idx}">Show evidence &amp; formula</span></div></div>`;
+    <div class="meta">${badges(o, true)} <span>tags: ${esc(tagLabels(o.tags))}</span> <button type="button" class="link" data-evidence="${idx}">Show evidence &amp; formula</button></div></div>`;
 }
 
 window.VR = {Components, PRI, esc, num, fmtV, fmtM, fmtRange, fmtAbout, rangeText, badges, weight, obsHtml,
-  setMode, isSimple, setGlossary, glossTerm, gloss, plainFinding};
+  setMode, isSimple, setGlossary, glossTerm, gloss, plainFinding, LOCAL, resetLocal, INPUT_CONTRACT};
 })();

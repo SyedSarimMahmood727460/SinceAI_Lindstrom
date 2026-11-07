@@ -6,12 +6,15 @@ from pathlib import Path
 from config.loader import CONFIG_DIR, load_yaml
 
 PACKS = {"general", "sustainable", "financial"}
-PAGES = {"story", "overview", "sites", "footprint", "circularity", "steering", "methodology", "readiness"}
+PAGES = {"story", "overview", "sites", "footprint", "circularity", "steering", "methodology", "readiness",
+         "vs_diy", "growth", "intel", "fit"}
 COMPONENTS = {
     "kpi_row", "observations", "site_rank", "site_table", "site_detail", "footprint_cards",
     "footprint_pct_chart", "baseline_compare_chart", "repairs_month_chart", "repairs_type_chart",
     "waste_routes_chart", "exec_summary", "discussion_points", "action_table", "methodology",
     "assumption_table", "data_quality", "readiness_table", "story_cards",
+    "diy_compare", "diy_cost_chart", "diy_inputs", "growth_inputs", "growth_levers", "intel_page",
+    "fit_page",
 }
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 

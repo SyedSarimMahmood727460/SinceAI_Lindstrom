@@ -1,0 +1,75 @@
+# "Built on Lindström's work" page (design §3). Data-driven and editable.
+# kind: PUBLIC_REFERENCE (public Lindström source, link required), DATA_PACK (challenge
+# materials / data pack), BRIEF (the challenge brief). Public facts are context only.
+note: >-
+  Public facts are context only — never calculation inputs. Every figure in Value Review is
+  computed by the engine from the synthetic data pack.
+assets:
+  - asset: Managerial dashboard mockups (inspiration deck)
+    today: Core and add-on views; General, Sustainable actions and Financial packs; a customisable canvas.
+    value_review: The same module and pack model (config/modules.json) and the same KPI-row layout.
+    brief_line: "§02 — a managerial view the customer can use"
+    source: "data pack: Lindstrom_Managerial_dashboard_mockups_INSPIRATION.pptx"
+    kind: DATA_PACK
+  - asset: eLindström customer portal
+    today: A 24/7 customer portal; since November 2025 it shows customers' GHG emissions (GHG Protocol, invoice-based, annual).
+    value_review: Proposed as an eLindström module, adding per-kg, monthly, per-site allocation with baselines and ranges.
+    brief_line: "§04 — a credible path to production"
+    source: https://lindstromgroup.com/uk/article/bringing-greater-transparency-to-emissions-data-in-our-online-portal/
+    kind: PUBLIC_REFERENCE
+  - asset: RFID garment tracking
+    today: An RFID chip per garment, tracked through eLindström (in use, laundry, repair).
+    value_review: "Utilisation = scanned ÷ allocated; service cycles and the on-time rate."
+    brief_line: "§02 — operational value at site level"
+    source: https://lindstromgroup.com/sustainability-goes-digital/
+    kind: PUBLIC_REFERENCE
+  - asset: Tableau reports (Allocated pieces, Washing %, End-to-end delivery, Repairs table, WWS washed kg)
+    today: Operational reports used by Lindström teams.
+    value_review: One adapter per report type; these are the Tier 1 source path in Data readiness.
+    brief_line: "§04 — plugs into approved Lindström data sources later"
+    source: "data pack: Data_Dictionary / Data_Quality"
+    kind: DATA_PACK
+  - asset: WWS laundry environmental-impact calculator; Textile waste kg report
+    today: Laundry-level water, energy and CO₂e factors, and textile-waste routes.
+    value_review: Laundry intensities and waste routes, allocated to the customer by washed-kg share (A003).
+    brief_line: "§02 — environmental and circular value"
+    source: "data pack: Laundry_Resources / Waste_Circularity"
+    kind: DATA_PACK
+  - asset: Sustainability Report 2025 (CSRD-referenced, EY-assured)
+    today: Group targets (−50% value-chain GHG by 2030); 66% of textile waste recycled in 2025.
+    value_review: Context only; status labels keep prototype estimates separate from reported figures.
+    brief_line: "§06 — transparent and defensible numbers"
+    source: https://d2ris6qfzcz0wn.cloudfront.net/wp-content/uploads/sites/8/2026/04/Lindstrom-Sustainability-Report-2025.pdf
+    kind: PUBLIC_REFERENCE
+  - asset: Workwear Alarm / repairs service
+    today: Products that reduce garment losses and extend garment life.
+    value_review: Observations R1 and R5 point to these levers as next steps.
+    brief_line: "§02 — actionable next steps"
+    source: "data pack: Repairs / Products"
+    kind: DATA_PACK
+  - asset: Data pack assumptions A001–A008, Baselines, Industry_Priorities
+    today: Lindström's own assumption framing for the challenge.
+    value_review: Used verbatim; team assumptions (T1 onwards) are added and labelled in the register.
+    brief_line: "§06 — assumptions and limitations stated"
+    source: "data pack: Assumptions / Baselines / Industry_Priorities"
+    kind: DATA_PACK
+  - asset: Challenge brief §02 / §04 / §06 / §07
+    today: The ask and the judging criteria.
+    value_review: "Requirement → feature checklist: the second table on this page."
+    brief_line: "§02, §04, §06, §07"
+    source: "Lindstrom_SinceAI_2026_Challenge_Brief (02.11.2026)"
+    kind: BRIEF
+brief_map:
+  - {asked: "Customer-level managerial view with site drill-down", where: "Overview · Sites & drill-down", status: done}
+  - {asked: "Period, baseline and product filters", where: "Toolbar: period, product, service line, baseline, sensitivity", status: done}
+  - {asked: "Personalised by customer priorities or a prompt (≥ 2 priorities, ≥ 2 industries)", where: "Priority chips · prompt box · industry rules", status: done}
+  - {asked: "At least 3 observations or recommendations with evidence", where: "Overview · What matters for this customer", status: done}
+  - {asked: "Steering-committee discussion points and actions", where: "Steering committee", status: done}
+  - {asked: "Customer-ready review export", where: "Export: PowerPoint, PDF, Excel", status: done}
+  - {asked: "Every figure shows how it is derived: baseline, assumptions, low/base/high range", where: "Click any tile · Methodology & assumptions", status: done}
+  - {asked: "Methodology and data-readiness notes", where: "Methodology & assumptions · Data readiness · docs/", status: done}
+  - {asked: "A credible path to approved sources, more industries, countries and service lines", where: "Data readiness · extension pack (Baltic Harbour Hotels, Mats, Estonia)", status: done}
+  - {asked: "Value versus doing it yourself: cost, convenience and environment", where: "Service vs do-it-yourself", status: done}
+  - {asked: "Show customers they can save more by working with Lindström more", where: "Growth opportunities", status: done}
+  - {asked: "Know where customer companies are going and how Lindström can help", where: "Account intelligence", status: done}
+  - {asked: "Easy to understand and explain for account managers", where: "Customer story · Simple/Expert detail · glossary", status: done}

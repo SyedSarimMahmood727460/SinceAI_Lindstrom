@@ -164,3 +164,21 @@ def test_missing_pack_names_env_var(monkeypatch):
             pass
     with pytest.raises(RuntimeError, match="VR_PACK_PATH"):
         asyncio.run(enter())
+
+
+def test_fit_config(client):
+    """'Built on Lindström's work' page content (design §3): >= 8 asset rows, the brief map,
+    and every PUBLIC_REFERENCE row links an http(s) source."""
+    r = client.get("/config/fit")
+    assert r.status_code == 200
+    fit = r.json()
+    assets = fit["assets"]
+    assert len(assets) >= 8
+    kinds = {"PUBLIC_REFERENCE", "DATA_PACK", "BRIEF"}
+    for a in assets:
+        assert {"asset", "today", "value_review", "brief_line", "source", "kind"} <= set(a)
+        assert a["kind"] in kinds
+    public = [a for a in assets if a["kind"] == "PUBLIC_REFERENCE"]
+    assert public and all(a["source"].startswith(("https://", "http://")) for a in public)
+    assert fit["brief_map"] and all({"asked", "where", "status"} <= set(b) for b in fit["brief_map"])
+    assert "never calculation inputs" in fit["note"]

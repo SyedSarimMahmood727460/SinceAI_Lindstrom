@@ -21,9 +21,15 @@ const PAGES = {
   steering: ['Steering-committee pack', 'Discussion points generated from the observations. A KAM edits them before the meeting.'],
   methodology: ['Methodology & assumptions', 'Boundaries, baseline, provenance and limitations. Always one click away and included in the export.'],
   readiness: ['Data readiness', 'Data-consistency warnings, quarantined rows, and how each prototype field maps to a future approved source.'],
+  vs_diy: ['Service vs do-it-yourself', 'What it would take to run the same textile service yourself, compared with the Lindström service: environment, cost, time and hygiene. The do-it-yourself figures use illustrative defaults until the account manager enters the customer\'s own numbers.'],
+  growth: ['Growth opportunities', 'The extra savings if the customer moves more to Lindström: more sites, more employees on the service, or service lines they do not use yet. Per year, for the whole account.'],
+  intel: ['Account intelligence', 'Where a customer company is going, from recent public sources, and how Lindström can help. Every claim links its source. Separate from the review figures.'],
+  fit: ["Built on Lindström's work", "How Value Review builds on Lindström's existing assets, and where each line of the brief is answered."],
 };
 // Components that show the account's figures; on an empty filter they say "No data for this filter".
-const STATIC_COMPONENTS = new Set(['methodology', 'assumption_table', 'data_quality', 'readiness_table', 'discussion_points']);
+// Growth is account-wide (not filtered); intelligence and the fit page do not use the review figures.
+const STATIC_COMPONENTS = new Set(['methodology', 'assumption_table', 'data_quality', 'readiness_table', 'discussion_points',
+  'growth_inputs', 'growth_levers', 'intel_page', 'fit_page']);
 const SOURCE_LABEL = {prompt: 'from your prompt', chips: 'your selection', customer: "customer's stated priorities + industry default",
   industry: 'industry default'};
 
@@ -31,7 +37,14 @@ const MODE_KEY = 'vr.mode';
 function storedMode() { try { return localStorage.getItem(MODE_KEY) === 'expert' ? 'expert' : 'simple'; } catch (e) { return 'simple'; } }
 const S = {account: null, period: '2025', product: '', serviceLine: '', baseline: 'B_LOCAL', sens: 'base', priorities: null,
   prioritySource: null, audience: 'kam', view: 'story', site: null, sort: null, intentText: '', mode: storedMode()};
-let R = null, siteReview = null, MODULES = [], ACCOUNTS = [], INTERNAL = [];
+let R = null, siteReview = null, MODULES = [], ACCOUNTS = [], INTERNAL = [], ASSUMPTIONS = {};
+// State for the DIY, growth, intelligence and fit pages (passed to the components as ctx.ext).
+const GROWTH_SENT = {};  // account -> growth inputs last saved in this session (kept when review.growth is null)
+const EXT = {
+  spec: {}, catalogue: null, fit: undefined,
+  intel: {company: 'Fazer Group', website: '', report: null, error: '', loading: false, snapshots: [], auto: false},
+  growthStored: () => growthStored(),
+};
 const productNames = {};
 const charts = {};
 let reqSeq = 0, siteSeq = 0;
@@ -43,7 +56,8 @@ async function api(path, opts) {
   if (!r.ok) {
     let detail = r.statusText;
     try { detail = (await r.json()).detail || detail; } catch (e) { /* not JSON */ }
-    const err = new Error(`${r.status}: ${detail}`); err.status = r.status; throw err;
+    const err = new Error(`${r.status}: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+    err.status = r.status; err.detail = detail; throw err;
   }
   return r;
 }
@@ -199,8 +213,10 @@ function renderPage() {
   document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.v === S.view));
   $('pageHead').innerHTML = pageHead();
   Object.keys(charts).forEach(id => { charts[id].destroy(); delete charts[id]; });
+  VR.resetLocal();
+  ensurePageData(S.view);
   const pri = activePri(), empty = emptyFilter();
-  const ctx = {R, S, pri, kpi: kpiOf, siteReview, hidden: hiddenModules()};
+  const ctx = {R, S, pri, kpi: kpiOf, siteReview, hidden: hiddenModules(), ext: EXT};
   const mods = MODULES.filter(m => m.page === S.view)
     .map((m, i) => ({m, i, w: weight(m.priority_tags, pri)}))
     .sort((a, b) => pin(b.m) - pin(a.m) || b.w - a.w || a.i - b.i).map(x => x.m);
@@ -223,6 +239,195 @@ function renderPage() {
   $('page').innerHTML = out.join('') || '<div class="mod"><div class="card empty">No modules for this page.</div></div>';
   if (window.Chart) pending.forEach(c => mkChart(c));
   else if (pending.length) toast('Charts unavailable (Chart.js did not load)', true);
+}
+
+// ---------- DIY, growth, intelligence and fit pages ----------
+/** Load what a page needs once (fit content, service catalogue, intel snapshots), then re-render. */
+function ensurePageData(view) {
+  const rerender = () => { if (S.view === view) renderPage(); };
+  if (view === 'fit' && EXT.fit === undefined && !EXT.fitLoading) {
+    EXT.fitLoading = true;
+    getJSON('/config/fit').then(f => { EXT.fit = f; }).catch(e => { EXT.fit = null; toast(`Could not load the page (${e.message})`, true); })
+      .finally(() => { EXT.fitLoading = false; rerender(); });
+  }
+  if ((view === 'growth' || view === 'intel') && EXT.catalogue === null && !EXT.catLoading) {
+    EXT.catLoading = true;
+    getJSON('/config/service-catalogue').then(c => { EXT.catalogue = c; }).catch(e => { EXT.catalogue = []; console.warn('catalogue unavailable', e); })
+      .finally(() => { EXT.catLoading = false; rerender(); });
+  }
+  if (view === 'intel' && !EXT.intel.auto && S.audience === 'kam') {
+    // first visit: list the snapshots and open the example company (Fazer Group) straight away
+    EXT.intel.auto = true;
+    getJSON('/intel/snapshots').then(list => {
+      EXT.intel.snapshots = list || [];
+      const pre = EXT.intel.snapshots.find(s => s.company === 'Fazer Group') || EXT.intel.snapshots[0];
+      if (pre && !EXT.intel.report && !EXT.intel.loading) runIntel(pre.company, ''); else rerender();
+    }).catch(e => { console.warn('snapshots unavailable', e); rerender(); });
+  }
+}
+
+let intelSeq = 0;
+async function runIntel(company, website) {
+  company = (company || '').trim(); website = (website || '').trim();
+  const I = EXT.intel;
+  I.company = company; I.website = website;
+  if (!company) { I.error = 'Enter a company name.'; I.report = null; renderPage(); return; }
+  const seq = ++intelSeq;
+  I.loading = true; I.error = ''; renderPage();
+  try {
+    const rep = await (await api('/intel', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({company, website: website || null})})).json();
+    if (seq !== intelSeq) return;
+    I.report = rep;
+  } catch (e) {
+    if (seq !== intelSeq) return;
+    I.report = null;
+    const d = e.detail;
+    I.error = typeof d === 'string' ? d : (Array.isArray(d) && d[0] && d[0].msg ? d[0].msg.replace(/^Value error, /, '') : e.message);
+  } finally {
+    if (seq === intelSeq) { I.loading = false; if (S.view === 'intel') renderPage(); }
+  }
+}
+
+/** UI-side number parsing: decimal comma → dot, spaces dropped, blank → undefined (= use the default).
+ * Anything else that is not a plain number is sent as text so the API answers with its 422 message. */
+function normNum(raw) {
+  const s = String(raw == null ? '' : raw).replace(/[\s  ]/g, '').replace(',', '.');
+  if (s === '') return undefined;
+  return /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(s) ? Number(s) : s;
+}
+
+/** The do-it-yourself inputs as stored (KAM-entered keys only), rebuilt from review.dto.inputs. */
+function diyStored() {
+  const out = {};
+  ((R && R.dto && R.dto.inputs) || []).filter(r => r.source === 'kam').forEach(r => {
+    if (r.value != null) out[r.key] = r.value;
+    if (r.key === VR.INPUT_CONTRACT) return;
+    if (r.low != null && r.low !== r.value) out[r.key + '_low'] = r.low;
+    if (r.high != null && r.high !== r.value) out[r.key + '_high'] = r.high;
+  });
+  return out;
+}
+
+/** The growth inputs as stored: from review.growth, or what this session last saved. */
+function growthStored() {
+  const g = R && R.growth && R.growth.inputs;
+  if (g) return g;
+  return GROWTH_SENT[S.account] || null;
+}
+function growthBody(g) {
+  const out = {};
+  if (!g) return out;
+  ['extra_sites', 'extra_wearers', 'expansion_price_eur_per_site_year'].forEach(k => { if (g[k] != null && g[k] !== 0) out[k] = g[k]; });
+  if ((g.extra_service_lines || []).length) out.extra_service_lines = [...g.extra_service_lines];
+  return out;
+}
+
+function diyFromForm(form) {
+  const spec = EXT.spec, body = {};
+  ((R.dto && R.dto.inputs) || []).forEach(r => {
+    const get = part => { const el = form.querySelector(`[data-in="${CSS.escape(r.key)}"][data-part="${part}"]`); return el ? normNum(el.value) : undefined; };
+    const v = get('value');
+    if (v !== undefined) {
+      const def = spec[r.key] ? spec[r.key].default : undefined;
+      if (r.source === 'kam' || v !== def) body[r.key] = v;  // an untouched default is not "entered"
+    }
+    const lo = get('low'), hi = get('high');
+    if (lo !== undefined) body[r.key + '_low'] = lo;
+    if (hi !== undefined) body[r.key + '_high'] = hi;
+  });
+  return body;
+}
+
+function growthFromForm(form) {
+  const g = {};
+  ['extra_sites', 'extra_wearers', 'expansion_price_eur_per_site_year'].forEach(k => {
+    const el = form.querySelector(`[data-g="${k}"]`); const v = el ? normNum(el.value) : undefined;
+    if (v !== undefined && v !== 0) g[k] = v;
+  });
+  const lines = [...form.querySelectorAll('[data-gline]:checked')].map(el => el.dataset.gline);
+  if (lines.length) g.extra_service_lines = lines;
+  return g;
+}
+
+/** Show a 422 message next to the field it names (form values stay as typed). */
+function showFormError(form, detail) {
+  form.querySelectorAll('.err-row,.gerr').forEach(el => el.remove());
+  const general = form.querySelector('.form-err');
+  general.textContent = '';
+  const msg = typeof detail === 'string' ? detail : (Array.isArray(detail) && detail[0] && detail[0].msg) || 'The inputs could not be saved.';
+  const m = /^([a-z0-9_]+?)(_low|_high)?:\s*(.*)$/i.exec(msg);
+  const key = m && m[1], part = m && m[2] ? ` (${m[2].slice(1)})` : '';
+  const row = key && form.querySelector(`tr[data-key="${CSS.escape(key)}"]`);
+  const gf = key && form.querySelector(`.gfield[data-key="${CSS.escape(key)}"]`);
+  if (row) {
+    const label = row.querySelector('label') ? row.querySelector('label').textContent : key;
+    const tr = document.createElement('tr'); tr.className = 'err-row';
+    tr.innerHTML = `<td colspan="6" class="l"><span class="err">${esc(label + part)}: ${esc(m[3])}</span></td>`;
+    row.after(tr);
+    const inp = row.querySelector(`[data-part="${m[2] ? m[2].slice(1) : 'value'}"]`); if (inp) inp.focus();
+  } else if (gf) {
+    const label = gf.querySelector('label,.glabel'); const div = document.createElement('div'); div.className = 'err gerr';
+    div.textContent = `${label ? label.textContent : key}: ${m[3]}`; gf.appendChild(div);
+    const inp = gf.querySelector('input'); if (inp) inp.focus();
+  } else general.innerHTML = `<span class="err">${esc(msg)}</span>`;
+}
+
+/** PUT replaces the whole stored set, so every save sends the DIY and the growth inputs together. */
+async function saveInputs(body, form, done) {
+  const btns = form ? [...form.querySelectorAll('button')] : [];
+  btns.forEach(b => { b.disabled = true; });
+  try {
+    await api(`/accounts/${encodeURIComponent(S.account)}/inputs`, {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  } catch (e) {
+    btns.forEach(b => { b.disabled = false; });
+    if (e.status === 422 && form) showFormError(form, e.detail); else toast(`Could not save (${e.message})`, true);
+    return;
+  }
+  const g = {};
+  ['extra_sites', 'extra_wearers', 'extra_service_lines', 'expansion_price_eur_per_site_year'].forEach(k => { if (k in body) g[k] = body[k]; });
+  GROWTH_SENT[S.account] = Object.keys(g).length ? g : null;
+  toast(done);
+  await load();
+}
+
+function onSubmit(e) {
+  const form = e.target.closest('form[data-form]'); if (!form) return;
+  e.preventDefault();
+  const kind = form.dataset.form;
+  if (kind === 'diy') saveInputs({...diyFromForm(form), ...growthBody(growthStored())}, form, 'Saved: the comparison uses your numbers');
+  else if (kind === 'growth') saveInputs({...diyStored(), ...growthFromForm(form)}, form, 'Saved: growth opportunity sized');
+  else if (kind === 'intel') runIntel($('intelCompany').value, $('intelWebsite').value);
+}
+
+/** Placeholders of low/high follow the value field: the default range, or "same as value" once changed. */
+function onInput(e) {
+  const el = e.target;
+  if (!el.matches || !el.matches('[data-in][data-part="value"]')) return;
+  const key = el.dataset.in, s = EXT.spec[key]; if (!s) return;
+  const v = normNum(el.value), atDefault = v === undefined || v === s.default;
+  const tr = el.closest('tr');
+  ['low', 'high'].forEach(p => { const x = tr.querySelector(`[data-part="${p}"]`); if (x) x.placeholder = atDefault ? String(s[p]) : '= value'; });
+}
+
+/** Drawer for results without an /explain endpoint (do-it-yourself and growth figures). */
+function explainLocal(id) {
+  const m = VR.LOCAL[id]; if (!m) return;
+  const reg = (ASSUMPTIONS.register || []).filter(a => (m.assumptions || []).includes(a.id));
+  const assum = reg.length ? `<table><tr><th class="l">ID</th><th class="l">Assumption</th><th class="l">Value / rule</th><th class="l">Confidence</th></tr>${reg.map(a =>
+    `<tr><td class="l">${esc(a.id)}</td><td class="l">${esc(a.assumption)}</td><td class="l">${esc(a.value_or_rule)}</td><td class="l">${esc(a.confidence)}</td></tr>`).join('')}</table>`
+    : `<p class="small">${esc((m.assumptions || []).join(', ') || 'No assumptions.')}</p>`;
+  const rng = m.range ? `<h3>Sensitivity (low / base / high)</h3><table><tr><th class="l">Case</th><th>Value</th></tr>${['low', 'base', 'high'].map(c =>
+    `<tr class="${c === S.sens ? 'sel' : ''}"><td class="l">${c}${c === S.sens ? ' (selected)' : ''}</td><td>${esc(VR.fmtV(m.unit, m.range[c]))}</td></tr>`).join('')}</table>` : '';
+  const kamIn = R.dto && (R.dto.inputs || []).some(i => i.source === 'kam') && /^dto_/.test(m.metric_id)
+    ? '<p class="small">✎ Uses figures entered by the account manager where given (see Your numbers).</p>' : '';
+  const lin = m.lineage || {};
+  const how = isSimple() ? '<p class="small">Switch to <button type="button" class="link" data-mode-set="expert">Expert detail</button> for the formula and data lineage.</p>'
+    : `<h3>How it's calculated</h3><div class="formula">${esc(m.formula_text)}</div>
+      <h3>Lineage</h3><p class="small">Facts: ${esc((lin.facts || []).join(', '))} · ${esc(VR.num(lin.rows))} rows</p>`;
+  openDrawer(`<h2>${esc(m.label)}</h2><p class="small">${esc(R.meta.node.name)} · ${esc(S.period)}${/^growth_/.test(m.metric_id) ? ' · per year, whole account' : ''}</p>
+    <p>${badges(m, true)}</p><p style="font-size:24px;font-weight:700;color:var(--navy);margin:6px 0">${esc(fmtM(m))}</p><p class="range">${esc(rangeText(m))}</p>
+    ${kamIn}${how}${rng}<h3>Assumptions</h3>${assum}`);
 }
 
 function mkChart({id, type, data, options}) {
@@ -252,10 +457,10 @@ async function explain(id, node) {
   const d = ex.definition, res = ex.result, cur = m || res;
   const rng = cur.range ? `<h3>Sensitivity (low / base / high)</h3><table><tr><th class="l">Case</th><th>Value</th></tr>${['low', 'base', 'high'].map(c =>
     `<tr class="${c === S.sens ? 'sel' : ''}"><td class="l">${c}${c === S.sens ? ' (selected)' : ''}</td><td>${esc(VR.fmtV(cur.unit, cur.range[c]))}</td></tr>`).join('')}</table>` : '';
-  const expertHint = '<p class="small">Switch to <span class="link" data-mode-set="expert">Expert detail</span> for the formula and data lineage.</p>';
+  const expertHint = '<p class="small">Switch to <button type="button" class="link" data-mode-set="expert">Expert detail</button> for the formula and data lineage.</p>';
   const assum = (ex.assumptions || []).length ? `<table><tr><th class="l">ID</th><th class="l">Assumption</th><th class="l">Value / rule</th><th class="l">Confidence</th></tr>${ex.assumptions.map(a =>
     `<tr><td class="l">${esc(a.id)}</td><td class="l">${esc(a.assumption)}</td><td class="l">${esc(a.value_or_rule)}</td><td class="l">${esc(a.confidence)}</td></tr>`).join('')}</table>
-    <p class="small"><span class="link" data-go="methodology">Open the full assumption register</span></p>` : '<p class="small">No assumptions: a direct formula over source rows.</p>';
+    <p class="small"><button type="button" class="link" data-go="methodology">Open the full assumption register</button></p>` : '<p class="small">No assumptions: a direct formula over source rows.</p>';
   const lin = res.lineage || {};
   const how = isSimple() ? '' : `<h3>How it's calculated</h3><div class="formula">${esc(d.formula_text || cur.formula_text)}</div>
     <p class="small">Aggregation: ${esc(d.aggregation)} · unit: ${esc(d.unit)} · inputs: ${esc((d.inputs || []).join(', '))}</p>`;
@@ -263,7 +468,7 @@ async function explain(id, node) {
   openDrawer(`<h2>${esc(cur.label)}</h2><p class="small">${esc(nodeName(node))} · ${esc(S.period)}${S.product ? ' · product ' + esc(S.product) : ''}${S.serviceLine ? ' · service line ' + esc(S.serviceLine) : ''}</p>
     <p>${badges(cur, true)}</p>
     <p style="font-size:26px;font-weight:700;color:var(--navy);margin:6px 0">${esc(fmtM(cur))}</p><p class="range">${esc(rangeText(cur))}</p>
-    ${cur.dq_warning ? `<div class="alert small">⚠ An input to this figure carries a ${VR.gloss('data-consistency warning')}. <span class="link" data-go="readiness">See Data readiness</span>.</div>` : ''}
+    ${cur.dq_warning ? `<div class="alert small">⚠ An input to this figure carries a ${VR.gloss('data-consistency warning')}. <button type="button" class="link" data-go="readiness">See Data readiness</button>.</div>` : ''}
     ${how}${rng}<h3>Assumptions</h3>${assum}
     ${lineage}`);
 }
@@ -282,16 +487,16 @@ function evidence(idx) {
   openDrawer(`<h2>${o.rule_id === 'R8' ? '⚠ ' : ''}${esc(o.title)}</h2><p>${badges(o, true)}</p><p>${VR.gloss(VR.plainFinding(o.finding))}</p>
     <p><b>Next step:</b> ${esc(o.action)}</p>
     <h3>Evidence</h3><table><tr><th class="l">Metric</th><th>${esc(siteNode ? nodeName(siteNode) : 'Site')}</th><th>Account</th></tr>${rows}</table>
-    ${siteNode ? `<p class="small"><span class="link" data-site="${esc(siteNode)}">Open ${esc(nodeName(siteNode))} drill-down</span></p>` : ''}
-    ${isSimple() ? '<p class="small">Switch to <span class="link" data-mode-set="expert">Expert detail</span> for the rule, z-score and formulas.</p>' : `<h3>Rule ${esc(o.rule_id)}</h3><div class="formula">${o.z != null ? `Peer group: the account's sites. z = ${VR.num(o.z, 2)} (outlier when |z| ≥ 1.5).\n` : ''}Priority match (${esc(o.tags.join(', '))}) sets the display order (score ${VR.num(o.score, 0)}).
+    ${siteNode ? `<p class="small"><button type="button" class="link" data-site="${esc(siteNode)}">Open ${esc(nodeName(siteNode))} drill-down</button></p>` : ''}
+    ${isSimple() ? '<p class="small">Switch to <button type="button" class="link" data-mode-set="expert">Expert detail</button> for the rule, z-score and formulas.</p>' : `<h3>Rule ${esc(o.rule_id)}</h3><div class="formula">${o.z != null ? `Peer group: the account's sites. z = ${VR.num(o.z, 2)} (outlier when |z| ≥ 1.5).\n` : ''}Priority match (${esc(o.tags.join(', '))}) sets the display order (score ${VR.num(o.score, 0)}).
 ${esc(formulas)}</div>`}`);
 }
 
 // ---------- interaction ----------
 function go(view) { if (!PAGES.hasOwnProperty(view)) return; S.view = view; closeDrawer(); renderPage(); window.scrollTo(0, 0); }
 
-/** Story "Show the detail": detail_view names a module (or a page). A target with no page yet
- * (vs_diy and growth get their own pages in a later task) falls back to the overview. */
+/** Story "Show the detail": detail_view names a module or a page (vs_diy, growth); an unknown
+ * target falls back to the overview. */
 function goDetail(target) {
   const mod = MODULES.find(m => m.id === target);
   const view = mod ? mod.page : (PAGES.hasOwnProperty(target) ? target : 'overview');
@@ -302,7 +507,7 @@ function goDetail(target) {
   }
 }
 
-async function copyText(text) {
+async function copyText(text, done = 'Talking point copied') {
   try {
     await navigator.clipboard.writeText(text);
   } catch (e) {  // clipboard API unavailable (permissions, insecure context): hidden-textarea fallback
@@ -313,7 +518,7 @@ async function copyText(text) {
     ta.remove();
     if (!ok) { toast('Could not copy: select the text and copy it by hand', true); return; }
   }
-  toast('Talking point copied');
+  toast(done);
 }
 
 function setMode(mode) {
@@ -323,16 +528,37 @@ function setMode(mode) {
 }
 
 // ---------- glossary tooltip ----------
-function showTip(el) {
-  const t = VR.glossTerm(el.dataset.term); if (!t) return;
+// The term carries aria-describedby="gtip" while the tip is open. The tip stays open while the
+// pointer is over it, and keyboard focus scrolling the term into view repositions it instead of hiding it.
+let tipFor = null, tipHideTimer = null, tipFocusAt = 0;
+function placeTip(el) {
   const tip = $('gtip');
-  tip.innerHTML = `<b>${esc(t.term)}</b>${esc(t.definition)}`; tip.hidden = false;
   const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
   const left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2));
   const top = r.bottom + 8 + h > window.innerHeight ? r.top - h - 8 : r.bottom + 8;
   tip.style.left = left + 'px'; tip.style.top = Math.max(8, top) + 'px';
 }
-function hideTip() { $('gtip').hidden = true; }
+function showTip(el) {
+  const t = VR.glossTerm(el.dataset.term); if (!t) return;
+  clearTimeout(tipHideTimer);
+  if (tipFor && tipFor !== el) tipFor.removeAttribute('aria-describedby');
+  const tip = $('gtip');
+  tip.innerHTML = `<b>${esc(t.term)}</b>${esc(t.definition)}`; tip.hidden = false;
+  el.setAttribute('aria-describedby', 'gtip'); tipFor = el;
+  placeTip(el);
+}
+function hideTip() {
+  clearTimeout(tipHideTimer);
+  $('gtip').hidden = true;
+  if (tipFor) { tipFor.removeAttribute('aria-describedby'); tipFor = null; }
+}
+/** Hide shortly after the pointer leaves, unless it moves onto the tip itself. */
+function hideTipSoon() { clearTimeout(tipHideTimer); tipHideTimer = setTimeout(hideTip, 150); }
+function onScrollTip() {
+  if ($('gtip').hidden || !tipFor) return;
+  if (Date.now() - tipFocusAt < 300 || document.activeElement === tipFor) placeTip(tipFor);  // focus-driven scroll
+  else hideTip();
+}
 
 function drill(id) {
   S.site = id; S.view = 'sites'; closeDrawer(); siteReview = null;
@@ -346,6 +572,13 @@ function togglePri(k) {
   if (!S.priorities.length) S.priorities = null;
   S.prioritySource = S.priorities ? 'chips' : null; S.intentText = '';
   load();
+}
+
+/** Everything tied to one account is reset when the account changes (by the selector or a prompt). */
+function switchAccount(id, opts) {
+  S.account = id; S.site = null; S.sort = null; S.serviceLine = ''; siteReview = null;
+  if (!(opts && opts.keepIntent)) { S.priorities = null; S.prioritySource = null; S.intentText = ''; }
+  closeDrawer();
 }
 
 async function runPrompt(text) {
@@ -362,7 +595,7 @@ async function runPrompt(text) {
     renderInterp(); return;
   }
   if (vs.node_id) {
-    if (ACCOUNTS.some(a => a.node_id === vs.node_id)) { if (vs.node_id !== S.account) { S.account = vs.node_id; S.site = null; } }
+    if (ACCOUNTS.some(a => a.node_id === vs.node_id)) { if (vs.node_id !== S.account) switchAccount(vs.node_id, {keepIntent: true}); }
     else if (R && R.sites.some(s => s.node_id === vs.node_id)) { S.site = vs.node_id; }
   }
   if (vs.priorities && vs.priorities.length) { S.priorities = vs.priorities; S.prioritySource = 'prompt'; }
@@ -388,8 +621,14 @@ async function exportReview(format) {
   const btn = $('exportBtn'); btn.disabled = true;
   try {
     const r = await fetch('/reviews/export', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
-    if (r.status === 400 || r.status === 501) { toast('Export available soon'); return; }  // format not built yet
-    if (!r.ok) { toast(`Export failed (${r.status})`, true); return; }
+    if (!r.ok) {
+      let detail = '';
+      try { const j = await r.json(); detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail || ''); } catch (e) { /* not JSON */ }
+      // only a format the server says it does not support yet is "coming soon"; anything else shows the server's reason
+      if (r.status === 501 || (r.status === 400 && /unsupported format/i.test(detail))) toast('Export available soon');
+      else toast(`Export failed (${r.status}${detail ? `: ${detail}` : ''})`, true);
+      return;
+    }
     const blob = await r.blob();
     const m = /filename="?([^";]+)"?/.exec(r.headers.get('Content-Disposition') || '');
     const a = document.createElement('a');
@@ -409,10 +648,15 @@ function busy(on) { $('loading').classList.toggle('on', on); $('main').classList
 
 document.addEventListener('click', e => {
   if (!e.target.closest('.export')) exportMenu(false);
-  const t = e.target.closest('[data-copy],[data-detail],[data-mode-set],[data-fmt],[data-explain],[data-evidence],[data-site],[data-go],[data-sort],[data-chip],[data-prompt],[data-close-site]');
+  const t = e.target.closest('[data-copy],[data-copy-growth],[data-detail],[data-mode-set],[data-fmt],[data-local],[data-explain],[data-evidence],[data-site],[data-go],[data-sort],[data-chip],[data-prompt],[data-close-site],[data-action],[data-intel-snap]');
   if (!t) return;
   const d = t.dataset;
   if (d.copy != null) { const c = R && R.story[+d.copy]; if (c) copyText(c.what_to_say); }
+  else if (d.copyGrowth != null) { if (R && R.growth && R.growth.narrative_line) copyText(R.growth.narrative_line, 'Line copied'); }
+  else if (d.local) explainLocal(d.local);
+  else if (d.action === 'diy-reset') saveInputs(growthBody(growthStored()), t.closest('form'), 'Reset: the comparison uses the defaults');
+  else if (d.action === 'growth-clear') saveInputs(diyStored(), t.closest('form'), 'Growth inputs cleared');
+  else if (d.intelSnap) runIntel(d.intelSnap, '');
   else if (d.detail != null) goDetail(d.detail);
   else if (d.modeSet) setMode(d.modeSet);
   else if (d.fmt) exportReview(d.fmt);
@@ -427,16 +671,31 @@ document.addEventListener('click', e => {
 });
 document.querySelectorAll('nav a').forEach(a => { a.onclick = () => go(a.dataset.v); });
 $('drawerX').onclick = closeDrawer;
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeDrawer(); exportMenu(false); hideTip(); } });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const menuOpen = !$('exportMenu').hidden;
+    closeDrawer(); exportMenu(false); hideTip();
+    if (menuOpen) $('exportBtn').focus();
+    return;
+  }
+  // clickable figures (role="button") open with Enter / Space like a button
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.fig[role="button"]')) { e.preventDefault(); e.target.click(); }
+});
+document.addEventListener('submit', onSubmit);
+document.addEventListener('input', onInput);
 const glAt = e => (e.target && e.target.closest ? e.target.closest('.gl[data-term]') : null);
-['mouseover', 'focusin'].forEach(ev => document.addEventListener(ev, e => { const g = glAt(e); if (g) showTip(g); }));
-['mouseout', 'focusout'].forEach(ev => document.addEventListener(ev, e => { if (glAt(e)) hideTip(); }));
-window.addEventListener('scroll', hideTip, {passive: true});
+document.addEventListener('mouseover', e => { const g = glAt(e); if (g) showTip(g); });
+document.addEventListener('focusin', e => { const g = glAt(e); if (g) { tipFocusAt = Date.now(); showTip(g); } });
+document.addEventListener('mouseout', e => { if (glAt(e)) hideTipSoon(); });
+document.addEventListener('focusout', e => { if (glAt(e)) hideTip(); });
+$('gtip').addEventListener('mouseenter', () => clearTimeout(tipHideTimer));
+$('gtip').addEventListener('mouseleave', hideTipSoon);
+window.addEventListener('scroll', onScrollTip, {passive: true});
 $('q').addEventListener('keydown', e => { if (e.key === 'Enter') runPrompt($('q').value); });
 $('qBtn').onclick = () => runPrompt($('q').value);
 $('exportBtn').onclick = () => exportMenu();
 document.querySelectorAll('#mode button').forEach(b => { b.onclick = () => { if (S.mode !== b.dataset.mode) setMode(b.dataset.mode); }; });
-$('cust').onchange = e => { S.account = e.target.value; S.priorities = null; S.prioritySource = null; S.intentText = ''; S.site = null; S.sort = null; S.serviceLine = ''; closeDrawer(); load(); };
+$('cust').onchange = e => { switchAccount(e.target.value); load(); };
 $('period').onchange = e => { S.period = e.target.value; load(); };
 $('product').onchange = e => { S.product = e.target.value; load(); };
 $('sline').onchange = e => { S.serviceLine = e.target.value; load(); };
@@ -451,7 +710,7 @@ async function init() {
     const glossary = getJSON('/config/glossary').catch(e => { console.warn('glossary unavailable', e); return []; });
     const [accounts, assumptions, modules, internal, terms] = await Promise.all([getJSON('/accounts'), getJSON('/config/assumptions'),
       getJSON('/config/modules'), getJSON('/config/internal-metrics'), glossary]);
-    ACCOUNTS = accounts; MODULES = modules; INTERNAL = internal;
+    ACCOUNTS = accounts; MODULES = modules; INTERNAL = internal; ASSUMPTIONS = assumptions; EXT.spec = assumptions.dto_inputs || {};
     VR.setGlossary(terms);
     $('cust').innerHTML = accounts.map(a => `<option value="${esc(a.node_id)}">${esc(a.name)} (${a.site_count} sites)</option>`).join('');
     const bl = Object.entries(assumptions.baselines || {});

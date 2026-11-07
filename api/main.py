@@ -288,6 +288,13 @@ def config_service_catalogue():
     return load_yaml("service_catalogue.yaml")
 
 
+@app.get("/config/fit")
+def config_fit():
+    """'Built on Lindström's work' page (design §3): asset rows and the brief map.
+    Public facts are context only, never calculation inputs."""
+    return load_yaml("lindstrom_fit.yaml")
+
+
 @app.get("/config/internal-metrics")
 def config_internal_metrics():
     """Metric ids that are never customer-facing (the dashboard hides their modules)."""
