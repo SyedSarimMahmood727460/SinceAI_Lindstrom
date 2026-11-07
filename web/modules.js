@@ -191,10 +191,206 @@ const srcBadge = r => (r.source === 'kam'
 const rawNum = v => (v == null ? '' : String(v));
 const FIT_KIND = {PUBLIC_REFERENCE: ['PUBLIC', 'b-PUBLIC'], DATA_PACK: ['DATA PACK', 'b-DATAPACK'], BRIEF: ['BRIEF', 'b-BRIEF']};
 
+// ---------- guided meeting flow (design §3, §5, §10a) ----------
+// Compact number style, mirrored from export/format.py fmt_compact (vectors in tests/test_format.py).
+// Each tier rounds first and then promotes the unit, so 999,999 EUR reads "€1.00M".
+const MINUS = '−', NO_VALUE = '—';
+const grp = (v, d) => Number(v).toLocaleString('en-GB', {minimumFractionDigits: d, maximumFractionDigits: d});
+function compactAbs(a, unit) {
+  switch (unit) {
+    case 'EUR':
+      if (Math.round(a) < 10000) return '€' + grp(a, 0);
+      if (Math.round(a / 1000) < 1000) return '€' + grp(a / 1000, 0) + 'k';
+      return '€' + grp(a / 1e6, 2) + 'M';
+    case 'l': return grp(a / 1000, 0) + ' m³';
+    case 'kgCO2e': {
+      if (Math.round(a) < 1000) return grp(a, 0) + ' kg CO₂e';
+      const t = a / 1000;
+      return Math.round(t * 10) / 10 >= 10 ? grp(t, 0) + ' t CO₂e' : grp(t, 1) + ' t CO₂e';
+    }
+    case 'h': return grp(a, 0) + ' h';
+    case 'kWh': return Math.round(a) >= 1000 ? grp(a / 1000, 0) + ' MWh' : grp(a, 0) + ' kWh';
+    case 'ratio': return grp(a * 100, 1) + '%';
+    default: return null;
+  }
+}
+/** Compact meeting style: €1.96M, €758k, €8,250, 1,407 m³, 255 t CO₂e, 1,152 h, 172 MWh, 98.3%.
+ * Negative values carry a true minus sign (−€297k), never "−€0"; None is a dash. */
+function fmtCompact(value, unit) {
+  if (value == null || !isFinite(value)) return NO_VALUE;
+  const t = compactAbs(Math.abs(value), unit);
+  if (t == null) return fmtV(unit, value);
+  return value < 0 && /[1-9]/.test(t) ? MINUS + t : t;
+}
+/** 'range €1.36M – €2.74M', or '' when there is no range (or both ends read the same). */
+function fmtCompactRange(m) {
+  if (!m || m.value == null || !m.range || m.range.low == null || m.range.high == null) return '';
+  const lo = Math.min(m.range.low, m.range.high), hi = Math.max(m.range.low, m.range.high);
+  const a = fmtCompact(lo, m.unit), b = fmtCompact(hi, m.unit);
+  return a === b ? '' : `range ${a} – ${b}`;
+}
+
+const MEET_STEPS = [[1, 'What you got', 'value delivered'], [2, 'Vs doing it yourself', 'cost and time'],
+  [3, 'Where to improve', 'sites to look at'], [4, 'Grow together', 'more sites & services'], [5, 'Agree next steps', 'owners & dates']];
+const MEET_FOOT = 'Estimates with ranges · Expert shows how each figure is calculated · click a figure to see what it means';
+/** Step numbers shown for this review and audience: the customer does not see an empty step 4. */
+function meetingSteps(R, audience) {
+  const isCustomer = audience === 'customer', hasGrowth = !!(R && R.growth && R.growth.totals);
+  return MEET_STEPS.map(s => s[0]).filter(n => !(n === 4 && isCustomer && !hasGrowth));
+}
+const lcFirst = s => (s ? s[0].toLowerCase() + s.slice(1) : '');
+/** Click target of a meeting tile: DIY/growth results open the local drawer, KPIs the /explain drawer. */
+function tileAttr(m, node) {
+  if (!m || m.value == null || !m.metric_id) return '';
+  if (/^(dto|growth)_/.test(m.metric_id)) { LOCAL[m.metric_id] = m; return `data-local="${esc(m.metric_id)}"`; }
+  return `data-explain="${esc(m.metric_id)}" data-node="${esc(node)}"`;
+}
+/** Hero tile: label, big compact number, range line, context line. A missing figure reads "—". */
+function mTile(label, m, node, context, o = {}) {
+  const has = m && m.value != null;
+  const attr = has ? (o.attr != null ? o.attr : tileAttr(m, node)) : '';
+  const v = o.text != null ? o.text : (has ? fmtCompact(m.value, m.unit) : NO_VALUE);
+  const r = has ? (o.range != null ? o.range : fmtCompactRange(m)) : 'no data for this filter';
+  const est = has && !isSimple() ? badges(m) : '';
+  return `<div class="mtile ${o.cls || ''}" ${attr ? `role="button" tabindex="0" ${attr} title="Click to see how this figure is calculated"` : ''}>
+    <div class="mt-l">${esc(label)} ${est}</div><div class="mt-v">${esc(v)}</div>
+    <div class="mt-r">${esc(r) || '&nbsp;'}</div>${context ? `<div class="mt-c">${esc(context)}</div>` : ''}</div>`;
+}
+const mTiles = list => `<div class="mtiles n${list.length}">${list.join('')}</div>`;
+const sayBox = text => (text ? `<div class="say msay"><div class="say-h">What to say <button type="button" class="btn ghost sm" data-copy-say="1" title="Copy the talking point">Copy</button></div>
+  <div class="say-t">${gloss(text)}</div></div>` : '');
+const demoBtn = isCustomer => (isCustomer ? '' : '<button type="button" class="btn" data-action="demo" title="Fill in an example contract price and growth scenario for this account">Load demo scenario</button>'); /* kam-only: demo */
+const storyCard = (R, id) => (R.story || []).find(c => c.id === id) || null;
+
+const MEET = {
+  1(ctx) {
+    const {R} = ctx, k = ctx.kpi, node = R.meta.node.id, conv = (R.dto && R.dto.convenience) || {};
+    const vs = `compared with ${lcFirst(R.meta.baseline.name)}`;
+    const hrs = conv.staff_hours_freed, ot = conv.on_time_rate || k('on_time_rate');
+    const third = hrs && hrs.value != null
+      ? mTile('Staff hours freed', hrs, node, ot && ot.value != null ? `and ${fmtCompact(ot.value, ot.unit)} of deliveries on time` : 'time your staff no longer spend on garments')
+      : mTile('On-time delivery', ot, node, 'share of deliveries that arrived on time');
+    const c = storyCard(R, 'value_delivered');
+    return {title: `What ${R.meta.node.name} got from Lindström in ${R.meta.period}`,
+      tiles: mTiles([mTile('Water saved', k('water_saving_l'), node, vs), mTile('CO₂e avoided', k('co2_saving_kg'), node, vs), third]),
+      support: c && c.relatable ? `<div class="mrel" title="A rough equivalent to help the figure land, not a measured result">${esc(c.relatable)}</div>` : '',
+      say: c ? c.what_to_say : 'These are estimates against an agreed baseline, shown with a range.'};
+  },
+
+  2(ctx) {
+    const {R} = ctx, d = R.dto, node = R.meta.node.id, isCustomer = ctx.S.audience === 'customer';
+    if (!d || !d.diy_total || d.diy_total.value == null) {
+      return {title: 'Doing it yourself', support: '<div class="card empty">No do-it-yourself comparison for this view.</div>'};
+    }
+    const diy = d.diy_total, net = d.net && d.net.value != null ? d.net : null;
+    const cp = d.contract_price && d.contract_price.value != null ? d.contract_price : null;
+    const title = net
+      ? `About ${fmtCompact(Math.abs(net.value), 'EUR')} ${net.value >= 0 ? 'less' : 'more'} with Lindström than doing it yourself`
+      : `Doing it yourself would cost about ${fmtCompact(diy.value, diy.unit)} in ${R.meta.period}`;
+    const conv = d.convenience || {}, hrs = conv.staff_hours_freed;
+    const tiles = [];
+    if (net) tiles.push(mTile(net.value >= 0 ? 'Less with Lindström' : 'More with Lindström', net, node,
+      'do-it-yourself total minus the Lindström contract', {cls: 'money', text: fmtCompact(Math.abs(net.value), 'EUR')}));
+    tiles.push(mTile('Do-it-yourself cost', diy, node, `running the same service yourself, ${R.meta.period}`));
+    tiles.push(hrs && hrs.value != null ? mTile('Staff hours freed', hrs, node, "your staff's time back")
+      : mTile('On-time delivery', conv.on_time_rate, node, 'share of deliveries that arrived on time'));
+    const max = Math.max(diy.value, cp ? cp.value : 0) || 1;
+    const bar = (label, m, cls) => `<div class="mbar"><span class="mb-l">${esc(label)}</span>
+      <span class="mb-t"><i class="${cls}" style="width:${Math.max(1, m.value / max * 100).toFixed(1)}%"></i></span><span class="mb-v">${esc(fmtCompact(m.value, m.unit))}</span></div>`;
+    let gap = '';
+    if (net) gap = `<div class="mgap ${net.value >= 0 ? 'pos' : 'neg'}">Gap ${esc(fmtCompact(net.value, 'EUR'))}: ${net.value >= 0
+      ? 'doing it yourself would cost more than the service' : 'on cost alone, doing it yourself would cost less than the service'}</div>`;
+    else if (!isCustomer) gap = `<div class="mhint">Enter the contract price or load the demo scenario. ${demoBtn(isCustomer)}</div>`; /* kam-only: demo */
+    const partial = (d.missing_lines || []).length ? `<div class="small">Partial: ${esc(d.missing_lines.map(id => (d.lines.find(l => l.id === id) || {}).label || id).join(', '))} could not be sized, so the do-it-yourself total is lower than it would be.</div>` : '';
+    const hyg = d.hygiene_note ? `<div class="small mhyg">Hygiene: ${esc(d.hygiene_note)}</div>` : '';
+    const inputs = !isCustomer ? Components.diy_inputs(ctx) : null; /* kam-only: diy_inputs */
+    const fold = inputs ? `<details class="mfold"><summary>Your numbers <span class="small">· prices and times behind the comparison</span></summary>${inputs.html}</details>` : '';
+    return {title, tiles: mTiles(tiles),
+      support: `<div class="card mbars">${cp ? bar('Lindström contract', cp, 'lin') : ''}${bar('Do it yourself', diy, 'diy')}${gap}${partial}${hyg}</div>`,
+      say: (storyCard(R, 'vs_diy') || {}).what_to_say, after: fold};
+  },
+
+  3(ctx) {
+    const {R} = ctx, c = storyCard(R, 'biggest_improvement');
+    const obs = R.observations.filter(o => o.rule_id !== 'R7' && o.rule_id !== 'R8');
+    if (!obs.length) return {title: 'No site stands out — performance is even across sites.',
+      support: '<button type="button" class="btn ghost" data-go="sites">See all sites</button>'};
+    const f = c && c.facts, tiles = [];
+    if (f && f.value != null && f.typical != null) {
+      const site = R.sites.find(s => s.name === f.site_name), mid = (c.value_refs || [])[0];
+      const siteAttr = site && mid ? `data-explain="${esc(mid)}" data-node="${esc(site.node_id)}"` : '';
+      tiles.push(mTile(`${f.metric_label} · ${f.site_name}`, {value: f.value, unit: f.unit}, null, 'this site', {attr: siteAttr, range: '', cls: 'money'}));
+      tiles.push(mTile('Typical across your sites', {value: f.typical, unit: f.unit}, null, 'the middle (median) site of this account',
+        {attr: `data-evidence="${R.observations.indexOf(obs[0])}"`, range: ''}));
+    }
+    const next = obs.slice(1, 3).map(o => `<li><b>${esc(o.title)}</b><div class="small">Next step: ${esc(o.action)}</div></li>`).join('');
+    return {title: c ? c.statement : obs[0].title, long: true, tiles: tiles.length ? mTiles(tiles) : '',
+      support: `<div class="card mnext">${next ? `<h3>Also worth a look</h3><ul>${next}</ul>` : ''}
+        <button type="button" class="btn ghost sm" data-go="sites">See all sites</button></div>`,
+      say: c ? c.what_to_say : obs[0].action};
+  },
+
+  4(ctx) {
+    const {R} = ctx, g = R.growth, node = R.meta.node.id, isCustomer = ctx.S.audience === 'customer';
+    const t = g && g.totals, cat = {};
+    (ctx.ext.catalogue || []).forEach(x => { cat[x.id] = x; });
+    const notes = g ? [...(g.skipped_lines || []).map(s => `${(cat[s.id] || {}).name || s.id}: ${s.reason}`),
+      ...(g.partial ? ['The do-it-yourself total behind these figures is partial, so the € figures are lower than they would be.'] : []),
+      ...(g.notes || [])] : [];
+    const notesH = notes.length ? `<ul class="mnotes small">${notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : '';
+    const form = !isCustomer ? Components.growth_inputs(ctx) : null; /* kam-only: growth_inputs */
+    const fold = open => (form ? `<details class="mfold" ${open ? 'open' : ''}><summary>${open ? 'Size a scenario' : 'Change the scenario'}</summary><div class="mfold-b">${form.html}</div></details>` : '');
+    if (!t) {
+      return {title: 'What if more sites and services came to Lindström?',
+        support: `<div class="card mbars">${!isCustomer ? `<div class="mhint">Enter sites, employees or service lines below, or load the demo scenario. ${demoBtn(isCustomer)}</div>` : ''}${notesH}</div>`, /* kam-only: demo */
+        say: 'Ask which sites and services come next.', after: fold(true)};
+    }
+    const per = 'per year, whole account';
+    const levers = (g.levers || []).map(lv => `<li><b>${esc(lv.label)}</b><span>${[['diy_cost_avoided', 'avoided'], ['co2_saving_kg', ''], ['staff_hours_freed', 'freed']]
+      .map(([key, w]) => (lv[key] && lv[key].value != null ? `${esc(fmtCompact(lv[key].value, lv[key].unit))}${w ? ' ' + w : ''}` : '')).filter(Boolean).join(' · ')}</span></li>`).join('');
+    return {title: g.statement || 'Growing together', long: true,
+      tiles: mTiles([mTile('Do-it-yourself cost avoided', t.diy_cost_avoided, node, per, {cls: 'money'}),
+        mTile('CO₂e avoided', t.co2_saving_kg, node, per), mTile('Staff hours freed', t.staff_hours_freed, node, per)]),
+      support: `<div class="card mnext"><h3>Levers</h3><ul class="mlevers">${levers}</ul>${notesH}</div>`,
+      say: g.what_to_say, after: fold(false)};
+  },
+
+  5(ctx) {
+    const {R} = ctx, isCustomer = ctx.S.audience === 'customer';
+    const pts = (R.narrative && R.narrative.discussion_points) || [];
+    const unitOf = id => { const m = ctx.kpi(id); return m ? m.unit : null; };
+    const labelOf = id => { const m = ctx.kpi(id); return m ? m.label : id; };
+    const target = a => (isCustomer ? esc(a.target_2026 == null ? '—' : a.target_2026) : `<input type="text" placeholder="set" aria-label="Target for ${esc(a.text)}" value="${esc(a.target_2026 == null ? '' : a.target_2026)}">`); /* kam-only: targets */
+    const rows = R.actions.map(a => `<tr><td class="l">${esc(a.text)}</td><td class="l">${esc(a.owner)}</td>
+      <td class="l">${esc(labelOf(a.kpi_metric_id))}</td><td>${esc(fmtV(unitOf(a.kpi_metric_id), a.value_2025))}</td><td>${target(a)}</td></tr>`).join('');
+    return {title: 'Agree the next steps',
+      support: `<div class="mgrid5"><div class="card"><h3>Discussion points</h3>${pts.length ? `<ol class="qs">${pts.map(p => `<li>${esc(p)}</li>`).join('')}</ol>` : '<p class="small">No discussion points for this view.</p>'}</div>
+        <div class="card"><h3>Actions → tracked next year</h3><table><tr><th class="l">Action</th><th class="l">Owner</th><th class="l">KPI</th><th>${esc(R.meta.period)}</th><th>2026 target</th></tr>${rows ||
+        '<tr><td class="l" colspan="5"><span class="small">No actions for this view.</span></td></tr>'}</table>
+        ${isCustomer ? '' : '<div class="small" style="margin-top:6px">Targets are for the meeting and are not saved in this prototype.</div>'}</div></div>
+        <div class="mexport"><span class="small">Take the review with you:</span><button type="button" class="btn ghost" data-fmt="pptx">PowerPoint</button><button type="button" class="btn ghost" data-fmt="pdf">PDF</button><button type="button" class="btn ghost" data-fmt="xlsx">Excel</button></div>`,
+      say: (storyCard(R, 'whats_next') || {}).what_to_say || 'Agree an owner and a date for each step before the meeting ends.'};
+  },
+};
+
 const Components = {
-  // Guided meeting flow (design §3): the landing page. Stub until the step renderer lands (Task 3).
+  // Guided meeting flow (design §3): the landing page; one step at a time (ctx.S.step, kept in #meeting/N).
   meeting_flow(ctx) {
-    return {html: '<div class="card empty">Meeting flow loads here</div>'};
+    const isCustomer = ctx.S.audience === 'customer';
+    const visible = meetingSteps(ctx.R, ctx.S.audience);
+    const step = visible.includes(ctx.S.step) ? ctx.S.step : visible[0];
+    const i = visible.indexOf(step), prev = visible[i - 1], next = visible[i + 1];
+    const name = n => MEET_STEPS.find(s => s[0] === n)[1];
+    const bar = MEET_STEPS.filter(([n]) => visible.includes(n)).map(([n, t, sub]) =>
+      `<button type="button" class="mstep ${n === step ? 'on' : ''}" data-step="${n}" ${n === step ? 'aria-current="step"' : ''}><b>${n} · ${esc(t)}</b><span>${esc(sub)}</span></button>`).join('');
+    const s = MEET[step](ctx);
+    const nav = `<div class="mnav">${prev ? `<button type="button" class="btn ghost" data-step="${prev}">◀ Back</button>` : '<span></span>'}
+      <span class="small mfoot">${esc(MEET_FOOT)}</span>
+      ${next ? `<button type="button" class="btn" data-step="${next}">Next: ${esc(name(next))} ▶</button>` : '<span></span>'}</div>`;
+    return {html: `<div class="meeting" data-step-now="${step}">
+      <div class="msteps" role="group" aria-label="Meeting steps">${bar}${isCustomer ? '<span class="mpill" title="Internal figures and edit controls are hidden">Customer view</span>' : ''}</div>
+      <h1 class="mtitle ${s.long ? 'long' : ''}">${step} · ${esc(s.title)}</h1>
+      ${s.tiles || ''}${s.support || ''}${sayBox(s.say)}${nav}${s.after || ''}</div>`};
   },
 
   // Customer story (G9): plain-language headline cards from review.story; the statements are
@@ -630,5 +826,6 @@ function obsHtml(o, i, idx) {
 }
 
 window.VR = {Components, PRI, esc, num, fmtV, fmtM, fmtRange, fmtAbout, rangeText, badges, weight, obsHtml,
-  setMode, isSimple, setGlossary, glossTerm, gloss, plainFinding, LOCAL, resetLocal, INPUT_CONTRACT};
+  setMode, isSimple, setGlossary, glossTerm, gloss, plainFinding, LOCAL, resetLocal, INPUT_CONTRACT,
+  fmtCompact, fmtCompactRange, meetingSteps};
 })();

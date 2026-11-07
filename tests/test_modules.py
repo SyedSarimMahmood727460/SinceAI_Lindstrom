@@ -95,3 +95,31 @@ def test_components_are_implemented_in_web():
     html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
     nav = set(re.findall(r'<a data-v="([a-z_]+)"', html))
     assert {m["page"] for m in mods} <= nav
+
+
+def _meeting_js() -> str:
+    """The meeting-flow code in web/modules.js: from the step helpers to the end of meeting_flow."""
+    js = (WEB_DIR / "modules.js").read_text(encoding="utf-8")
+    start = js.index("// ---------- guided meeting flow")
+    end = js.index("  // Customer story (G9)")
+    return js[start:end]
+
+
+def test_meeting_customer_hides_controls():
+    """Customer view: every edit control in the meeting flow (Your numbers form, demo button,
+    growth form, target inputs) sits behind an audience guard, marked /* kam-only */."""
+    code = _meeting_js()
+    assert re.search(r"const isCustomer = ctx\.S\.audience === 'customer'", code)
+    for control in ("diy_inputs", "demo", "growth_inputs", "targets"):
+        lines = [ln for ln in code.splitlines() if f"/* kam-only: {control} */" in ln]
+        assert lines, f"no kam-only guard for {control}"
+        for ln in lines:
+            assert "isCustomer" in ln, ln
+    # nothing outside a guarded line renders those controls
+    for ln in code.splitlines():
+        if "kam-only" in ln:
+            continue
+        assert "Components.diy_inputs" not in ln and "Components.growth_inputs" not in ln, ln
+        assert 'data-action="demo"' not in ln and "<input" not in ln, ln
+    # step 4 drops out of the customer's step bar when there is no growth to show
+    assert re.search(r"isCustomer && !hasGrowth", code)

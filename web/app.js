@@ -36,7 +36,10 @@ const SOURCE_LABEL = {prompt: 'from your prompt', chips: 'your selection', custo
 const MODE_KEY = 'vr.mode';
 function storedMode() { try { return localStorage.getItem(MODE_KEY) === 'expert' ? 'expert' : 'simple'; } catch (e) { return 'simple'; } }
 const S = {account: null, period: '2025', product: '', serviceLine: '', baseline: 'B_LOCAL', sens: 'base', priorities: null,
-  prioritySource: null, audience: 'kam', view: 'meeting', site: null, sort: null, intentText: '', mode: storedMode()};
+  prioritySource: null, audience: 'kam', view: 'meeting', step: 1, site: null, sort: null, intentText: '', mode: storedMode()};
+// A reload keeps the meeting step: #meeting/N (design §3).
+const hashStep = () => { const m = /^#meeting\/([1-5])$/.exec(location.hash); return m ? +m[1] : null; };
+if (hashStep()) S.step = hashStep();
 let R = null, siteReview = null, MODULES = [], ACCOUNTS = [], INTERNAL = [], ASSUMPTIONS = {};
 // State for the DIY, growth, intelligence and fit pages (passed to the components as ctx.ext).
 const GROWTH_SENT = {};  // account -> growth inputs last saved in this session (kept when review.growth is null)
@@ -87,7 +90,7 @@ async function load() {
     render();
     if (S.site) loadSite();
     if (!EXT.storedGrowth[S.account]) {  // growth form prefill, also a lone stored expansion price
-      fetchStoredGrowth().then(g => { if (g && seq === reqSeq && S.view === 'growth') renderPage(); });
+      fetchStoredGrowth().then(g => { if (g && seq === reqSeq && (S.view === 'growth' || S.view === 'meeting')) renderPage(); });
     }
   } catch (e) {
     if (seq === reqSeq) toast(`Could not load the review (${e.message})`, true);
@@ -227,6 +230,7 @@ function renderPage() {
   $('pageHead').innerHTML = pageHead();
   Object.keys(charts).forEach(id => { charts[id].destroy(); delete charts[id]; });
   VR.resetLocal();
+  syncHash();
   ensurePageData(S.view);
   const pri = activePri(), empty = emptyFilter();
   const ctx = {R, S, pri, kpi: kpiOf, siteReview, hidden: hiddenModules(), ext: EXT};
@@ -254,6 +258,66 @@ function renderPage() {
   else if (pending.length) toast('Charts unavailable (Chart.js did not load)', true);
 }
 
+// ---------- meeting flow steps ----------
+/** Keep S.step on a visible step (the customer view drops an empty step 4) and mirror it in the URL hash. */
+function syncHash() {
+  let want = '';
+  if (S.view === 'meeting') {
+    const vis = VR.meetingSteps(R, S.audience);
+    if (!vis.includes(S.step)) S.step = [...vis].reverse().find(n => n < S.step) || vis[0];
+    want = `#meeting/${S.step}`;
+  }
+  if (location.hash !== want) history.replaceState(null, '', want || location.pathname + location.search);
+}
+function setStep(n, focusBar) {
+  if (!R || S.view !== 'meeting') return;
+  const vis = VR.meetingSteps(R, S.audience);
+  if (!vis.includes(n)) return;
+  S.step = n; closeDrawer(); renderPage(); window.scrollTo(0, 0);
+  if (focusBar) { const b = document.querySelector(`.msteps [data-step="${n}"]`); if (b) b.focus(); }
+}
+/** ←/→ step through the meeting when focus is not in a form field. */
+function stepKey(e) {
+  if (S.view !== 'meeting' || !R || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return false;
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return false;
+  const el = e.target;
+  if (el && el.closest && el.closest('input,select,textarea,[contenteditable],details[open] form')) return false;
+  if ($('drawer').classList.contains('open')) return false;
+  const vis = VR.meetingSteps(R, S.audience), i = vis.indexOf(S.step);
+  const n = vis[i + (e.key === 'ArrowRight' ? 1 : -1)];
+  if (n == null) return false;
+  setStep(n, !!(el && el.closest && el.closest('.msteps')));
+  return true;
+}
+
+const DEMO = {[VR.INPUT_CONTRACT]: 1200000, extra_sites: 4};
+/** Demo scenario (design §6): merge an example contract price and growth scenario into the stored
+ * inputs (entries already stored win; the demo service line is added), then PUT the full set. */
+async function loadDemo(btn) {
+  if (!R || S.audience === 'customer') return;
+  const acct = S.account;
+  if (btn) btn.disabled = true;
+  try {
+    const [st, cat] = await Promise.all([getJSON(`/accounts/${encodeURIComponent(acct)}/inputs?include=growth`), catalogue()]);
+    if (acct !== S.account) return;
+    const used = new Set(R.meta.service_lines || []);
+    const mats = (cat || []).find(c => c.id === 'mats');
+    const line = used.has(mats ? mats.service_line : 'Mats') ? 'washroom' : 'mats';
+    const g = growthBody(st.growth);
+    const body = {...DEMO, ...diyStored(st.inputs), ...g};
+    body.extra_service_lines = [...new Set([...(g.extra_service_lines || []), line])];
+    await saveInputs(body, null, 'Demo scenario loaded — example numbers; edit or reset in Your numbers.');
+  } catch (e) {
+    toast(`Could not load the demo scenario (${e.message})`, true);
+  } finally { if (btn && btn.isConnected) btn.disabled = false; }
+}
+/** The service catalogue, loaded once. */
+async function catalogue() {
+  if (EXT.catalogue) return EXT.catalogue;
+  try { EXT.catalogue = await getJSON('/config/service-catalogue'); } catch (e) { console.warn('catalogue unavailable', e); return []; }
+  return EXT.catalogue;
+}
+
 // ---------- DIY, growth, intelligence and fit pages ----------
 /** Load what a page needs once (fit content, service catalogue, intel snapshots), then re-render. */
 function ensurePageData(view) {
@@ -263,7 +327,7 @@ function ensurePageData(view) {
     getJSON('/config/fit').then(f => { EXT.fit = f; }).catch(e => { EXT.fit = null; toast(`Could not load the page (${e.message})`, true); })
       .finally(() => { EXT.fitLoading = false; rerender(); });
   }
-  if ((view === 'growth' || view === 'intel') && EXT.catalogue === null && !EXT.catLoading) {
+  if ((view === 'growth' || view === 'intel' || view === 'meeting') && EXT.catalogue === null && !EXT.catLoading) {
     EXT.catLoading = true;
     getJSON('/config/service-catalogue').then(c => { EXT.catalogue = c; }).catch(e => { EXT.catalogue = []; console.warn('catalogue unavailable', e); })
       .finally(() => { EXT.catLoading = false; rerender(); });
@@ -323,10 +387,11 @@ function fieldNum(el, field) {
   return v;
 }
 
-/** The do-it-yourself inputs as stored (KAM-entered keys only), rebuilt from review.dto.inputs. */
-function diyStored() {
+/** The do-it-yourself inputs as stored (KAM-entered keys only), rebuilt from review.dto.inputs
+ * (or from the rows of GET /inputs). */
+function diyStored(rows = R && R.dto && R.dto.inputs) {
   const out = {};
-  ((R && R.dto && R.dto.inputs) || []).filter(r => r.source === 'kam').forEach(r => {
+  (rows || []).filter(r => r.source === 'kam').forEach(r => {
     if (r.value != null) out[r.key] = r.value;
     if (r.key === VR.INPUT_CONTRACT) return;
     if (r.low != null && r.low !== r.value) out[r.key + '_low'] = r.low;
@@ -722,10 +787,13 @@ document.addEventListener('click', e => {
   if (!e.target.closest('.export')) exportMenu(false);
   if (!e.target.closest('.pop-wrap') && e.target.isConnected) settingsPanel(false);
   if (!e.target.closest('#askPanel,#askBtn') && e.target.isConnected) askPanel(false);
-  const t = e.target.closest('[data-copy],[data-copy-growth],[data-detail],[data-mode-set],[data-fmt],[data-local],[data-explain],[data-evidence],[data-site],[data-go],[data-sort],[data-chip],[data-prompt],[data-close-site],[data-action],[data-intel-snap]');
+  const t = e.target.closest('[data-step],[data-copy-say],[data-copy],[data-copy-growth],[data-detail],[data-mode-set],[data-fmt],[data-local],[data-explain],[data-evidence],[data-site],[data-go],[data-sort],[data-chip],[data-prompt],[data-close-site],[data-action],[data-intel-snap]');
   if (!t) return;
   const d = t.dataset;
-  if (d.copy != null) { const c = R && R.story[+d.copy]; if (c) copyText(c.what_to_say); }
+  if (d.step) setStep(+d.step, !!t.closest('.msteps'));
+  else if (d.copySay) { const x = t.closest('.say') && t.closest('.say').querySelector('.say-t'); if (x) copyText(x.textContent.trim()); }
+  else if (d.action === 'demo') loadDemo(t);
+  else if (d.copy != null) { const c = R && R.story[+d.copy]; if (c) copyText(c.what_to_say); }
   else if (d.copyGrowth != null) { if (R && R.growth && R.growth.narrative_line) copyText(R.growth.narrative_line, 'Line copied'); }
   else if (d.local) explainLocal(d.local);
   else if (d.action === 'diy-reset') resetDiy(t.closest('form'));
@@ -754,10 +822,15 @@ document.addEventListener('keydown', e => {
     else if (askOpen) $('askBtn').focus();
     return;
   }
-  // clickable figures (role="button") open with Enter / Space like a button
-  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.fig[role="button"]')) { e.preventDefault(); e.target.click(); }
+  // clickable figures and meeting tiles (role="button") open with Enter / Space like a button
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.fig[role="button"],.mtile[role="button"]')) { e.preventDefault(); e.target.click(); return; }
+  if (stepKey(e)) e.preventDefault();
 });
 document.addEventListener('submit', onSubmit);
+window.addEventListener('hashchange', () => {  // a typed #meeting/N; renderPage clamps a hidden step
+  const n = hashStep();
+  if (n && R && (n !== S.step || S.view !== 'meeting')) { S.view = 'meeting'; S.step = n; closeDrawer(); renderPage(); }
+});
 document.addEventListener('input', onInput);
 const glAt = e => (e.target && e.target.closest ? e.target.closest('.gl[data-term]') : null);
 document.addEventListener('mouseover', e => { const g = glAt(e); if (g) showTip(g); });
