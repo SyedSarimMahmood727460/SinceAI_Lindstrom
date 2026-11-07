@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Show Lindström judges that the solution (1) builds on their existing work, (2) extends to new service lines, industries, sites and countries without code changes, (3) exports PPTX/PDF/Excel, and (4) compares Lindström's service with do-it-yourself on cost, convenience and environment, using account-manager inputs over defaults.
+**Goal:** (Round 3: also story landing + simple mode, growth opportunities, AI account intelligence.) Show Lindström judges that the solution (1) builds on their existing work, (2) extends to new service lines, industries, sites and countries without code changes, (3) exports PPTX/PDF/Excel, and (4) compares Lindström's service with do-it-yourself on cost, convenience and environment, using account-manager inputs over defaults.
 
 **Architecture:** Generalise loading to a list of configured adapters (Excel pack + CSV extension packs). Add a service-line filter through engine → review → API → UI. Add a deterministic DIY-comparison module (`metrics/dto.py`) fed by validated, per-account stored inputs over config defaults. Add PDF (reportlab) and Excel (openpyxl) builders beside the PPTX builder, all rendering one ReviewModel. Static content (fit page, pitch deck) is config/script driven.
 
@@ -203,80 +203,203 @@ tests/conftest.py, tests/test_export.py  MOD
 - [ ] **Step 4:** Run the new tests, then the full suite. Expected: pass.
 - [ ] **Step 5:** Commit `feat: service vs do-it-yourself comparison with account-manager inputs`.
 
-### Task 5: Frontend: fit page, service-line filter, DIY page, export menu
+### Task 5: Customer story backend (plain-language cards)
 
-**Files:** Create `config/lindstrom_fit.yaml`. Modify `api/main.py` (`GET /config/fit`), `web/index.html`, `web/app.js`, `web/modules.js`, `web/styles.css`, `config/modules.json`, `tests/test_modules.py`, `tests/test_api.py` (fit endpoint test).
-
-**Interfaces:**
-- Consumes: `meta.service_lines`, `meta.service_line`, `dto` (Task 4), inputs endpoints (Task 4), export formats pptx|pdf|xlsx (Task 6; until Task 6 lands, pdf/xlsx return 400 → the UI shows "Export available soon").
-- `config/lindstrom_fit.yaml`: `assets: [{asset, today, value_review, brief_line, source, kind}]` with the 8 rows from design §3, plus `brief_map: [{requirement, where, status}]`. Sources for PUBLIC_REFERENCE rows:
-  - eLindström emissions: https://lindstromgroup.com/uk/article/bringing-greater-transparency-to-emissions-data-in-our-online-portal/
-  - RFID: https://lindstromgroup.com/sustainability-goes-digital/
-  - Sustainability Report 2025: https://d2ris6qfzcz0wn.cloudfront.net/wp-content/uploads/sites/8/2026/04/Lindstrom-Sustainability-Report-2025.pdf
-  - Dashboard mockups / data pack / brief: "Challenge pack (provided)"
-- UI changes:
-  - nav item "Built on Lindström's work" (Trust section) renders both tables, with a PUBLIC badge + link for public rows and the note "Public facts are context only — never calculation inputs".
-  - header "Service line" select (All + meta.service_lines) → `service_line` query.
-  - new Review page "Service vs do-it-yourself": 4 columns (Environment uses existing savings KPIs; Cost lines + DIY total + contract + net, or the prompt "Enter the contract price to see the net comparison"; Time = staff hours freed + on-time + utilisation; Hygiene note), a cost-breakdown bar chart, and a "uses figures entered by the account manager" chip when any source == "kam".
-  - "Your numbers" panel (KAM audience only): one row per input (label, value field prefilled, low/high fields, unit, source badge, entered date), Save (PUT, then reload review), "Reset to defaults" (PUT {}). The comma → dot normalisation and blank → omit happen before sending; a 422 message is shown inline. Customer audience: a read-only inputs table.
-  - Export button → menu: PowerPoint · PDF · Excel.
-  - modules.json: register the new components with `required_metrics: []` (DTO components check `dto` presence instead).
-
-- [ ] **Step 1:** Add `test_fit_config` (`/config/fit` returns ≥ 8 assets, every PUBLIC_REFERENCE row has an http source) and update `test_modules.py` for the new components. Run → FAIL → implement the endpoint/config → PASS.
-- [ ] **Step 2:** Implement the UI.
-- [ ] **Step 3: Verify in the browser** (server on port 8000; the controller runs the visual check if you can't):
-  1. Fit page renders both tables.
-  2. Service-line select shows Mats for Baltic Harbour Hotels (start the server with extensions on).
-  3. DIY page with defaults; enter contract price 120000 → net appears; enter "2,5" for local laundry → saved as 2.5.
-  4. Customer audience: inputs read-only, no edit form.
-  5. Export menu shows three options.
-  6. No console errors.
-- [ ] **Step 4:** Commit `feat: fit page, service-line filter, DIY comparison page, export menu`.
-
-### Task 6: PDF and Excel export; PPTX DIY slide
-
-**Files:** Create `export/pdf_builder.py`, `export/xlsx_builder.py`, `tests/test_exports_more.py`. Modify `export/pptx_builder.py`, `api/main.py`, `tests/test_export.py` (slide count 9 → 10).
+**Files:** Create `insights/story.py`, `config/relatable.yaml`, `config/glossary.yaml`, `tests/test_story.py`. Modify `api/review_model.py`, `api/build.py`, `api/main.py` (`GET /config/glossary`).
 
 **Interfaces:**
-- Consumes: ReviewModel incl. `dto`, `meta.service_line`; `export.charts` PNG helpers; `fmt_value`.
+- Consumes: ReviewModel KPIs, `dto` (Task 4), `growth` (Task 6; the card is omitted while it's absent), observations/actions, and the `fmt_value` formatter (move it to `export/format.py` and re-import it in pptx_builder, so `insights/` doesn't import from `export/`).
 - Produces:
-  - `build_pdf(review, out_path: Path) -> Path` (reportlab platypus, A4 landscape). Sections in PPTX order, with "Service vs do-it-yourself" inserted after Footprint (10 sections). DejaVuSans registered. Footer on every page with the disclaimer + run_id.
-  - `build_xlsx(review, out_path: Path) -> Path`, with sheets Summary, KPIs, Sites, Observations, Actions, DIY comparison, Inputs, Assumptions, Data quality (columns per design §5 and §8a; numbers stored as numbers).
-  - PPTX: a new slide "Service vs do-it-yourself" after Footprint (lines table + net or the contract prompt + staff hours); the cover shows the service line when filtered.
-  - `/reviews/export` accepts `format` ∈ {pptx, pdf, xlsx}. MIME types `application/pdf` and `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`; filename `review_{id}_{period}.{ext}`.
+  - `build_story(review) -> list[dict]`. Each card has `{id, title, statement, relatable: str|None, what_to_say, detail_view, value_refs: [metric_id]}`, with ids in this order: `value_delivered`, `vs_diy`, `biggest_improvement`, `growth`, `whats_next`. Any card whose data is missing is skipped.
+  - `ReviewModel.story: list[dict]`.
+  - Statements are templates filled by code. Ranges are phrased "about X (between A and B)".
+- `config/relatable.yaml`: conversion factors **researched by the implementer with sources**, each `{id, factor, unit, label_template, source_url, note: "illustrative comparison"}`. At least:
+  - household water per year (Finland);
+  - average passenger car CO₂ per year (EU or Finland).
 
-- [ ] **Step 1: Write failing tests** in `tests/test_exports_more.py`:
-  - `test_pdf_has_sections` (pypdf: ≥ 10 pages, or the texts "Service vs do-it-yourself", "Methodology", and the disclaimer are present)
-  - `test_pdf_unicode` (text contains "Kraków")
-  - `test_xlsx_sheets` (all 9 sheet names)
-  - `test_xlsx_kpi_matches_api` (the KPIs sheet row co2_saving_kg value == review KPI value at sens "low")
-  - `test_xlsx_unicode` (Sites sheet contains "Łódź")
-  - `test_xlsx_customer_audience` (no cell anywhere contains "idle_stock_value_eur")
-  - `test_export_formats_api` (pptx/pdf/xlsx → 200 + MIME; "docx" → 400)
-  - `test_pptx_has_diy_slide` (slide titled "Service vs do-it-yourself" present)
-- [ ] **Step 2:** Run. Expected: FAIL.
-- [ ] **Step 3:** Implement. Reuse `fmt_value`/`fmt_number` (move them to `export/format.py` if both builders need them, then import them back into pptx_builder).
-- [ ] **Step 4:** Run the new tests, then the full suite. Expected: pass.
-- [ ] **Step 5:** Commit `feat: PDF and Excel exports, DIY slide in PowerPoint`.
+  Relatable text = metric value ÷ factor, rounded to 2 significant figures, prefixed "≈" and labelled illustrative.
+- `config/glossary.yaml`: plain-language definitions (≤ 30 words each) for baseline, allocation, Scope 3, utilisation, range/sensitivity, estimate, repair handprint, data-consistency warning.
 
-### Task 7: Pitch deck and docs
+- [ ] **Step 1: Failing tests** in `tests/test_story.py`:
+  - `test_story_cards_northstar` (ids are an ordered subset of the 5; value_delivered present; no statement contains "None"/"nan")
+  - `test_story_uses_review_values` (the value_delivered statement contains the formatted `water_saving_l` or `co2_saving_kg` value from the same review)
+  - `test_relatable_labelled` (every relatable string starts with "≈"; every yaml factor has a source_url)
+  - `test_story_customer_audience` (no internal metric ids in value_refs)
+  - `test_story_empty_filter` (Apex + P1004 builds without exception)
+  - `test_glossary_endpoint`
+- [ ] **Step 2:** Run → FAIL. **Step 3:** Implement. **Step 4:** Run the new tests + full suite → PASS. **Step 5:** Commit `feat: customer story cards with relatable comparisons and glossary`.
+
+### Task 6: Growth opportunities engine ("work with us more")
+
+**Files:** Create `metrics/growth.py`, `config/service_catalogue.yaml`, `tests/test_growth.py`. Modify `model/inputs_store.py` (new keys), `config/assumptions/v1.yaml` (T12+), `api/review_model.py`, `api/build.py`, `api/main.py` (`GET /config/service-catalogue`).
+
+**Interfaces:**
+- Consumes: the Task 4 DTO machinery (per-kg cost formulas, effective inputs), `Engine.compute`.
+- Produces:
+  - `config/service_catalogue.yaml`: `[{id, name, service_line, description, typical_kg_per_site_month: {default, low, high}, typical_price_eur_per_kg: {default, low, high}, assumption_id, lindstrom_offer_url}]`. Ids: `workwear`, `mats`, `washroom`, `cleanroom`, `hospitality_textiles` (illustrative; T12–T16; offer URLs on lindstromgroup.com).
+  - New input keys: `extra_sites` (int ≥ 0), `extra_wearers` (int ≥ 0), `extra_service_lines` (list of catalogue ids), `expansion_price_eur_per_site_year` (optional ≥ 0). An unknown catalogue id → ValueError.
+  - `compute_growth(engine, account_id, period, baseline_id, inputs, assumptions, catalogue) -> dict | None` = `{levers: [{id: "sites"|"wearers"|"line:<id>", label, diy_cost_avoided, staff_hours_freed, co2_saving_kg, water_saving_l (MetricResults), net: MetricResult|None}], totals: {same + net}, narrative_line: str}`. Returns None when no growth inputs are set.
+    - sites lever = current per-site averages (DTO lines ÷ sites, savings ÷ sites) × extra_sites;
+    - wearers lever = per-wearer averages × extra_wearers;
+    - service line lever = typical kg/site/month × (current sites + extra_sites) × months, valued with the baseline's DIY washing cost per kg and its savings per kg;
+    - net only if the expansion price is given.
+    All are ESTIMATED, with low/base/high in the same direction rule as design §8a.4 item 1.
+  - `ReviewModel.growth: dict | None`.
+
+- [ ] **Step 1: Failing tests** in `tests/test_growth.py`:
+  - `test_growth_none_without_inputs`
+  - `test_growth_sites_scales_linearly` (extra_sites 2 vs 4 → the base doubles within 1%)
+  - `test_growth_wearers`
+  - `test_growth_new_line_mats` (values > 0)
+  - `test_growth_net_needs_price`
+  - `test_growth_ranges_ordered`
+  - `test_growth_unknown_line_422` (API PUT)
+  - `test_growth_narrative_line_has_values`
+  - `test_service_catalogue_endpoint`
+- [ ] **Step 2:** Run → FAIL. **Step 3:** Implement. **Step 4:** Run → PASS + full suite. **Step 5:** Commit `feat: growth opportunities from account-manager expansion inputs`.
+
+### Task 7: Account intelligence (AI research on a real public company)
+
+**Files:** Create `ai/intel.py`, `data/intel_snapshots/fazer-group.json`, `tests/test_intel.py`. Modify `api/main.py`, `.gitignore` (`data/intel_cache/`).
+
+**Interfaces:**
+- Produces:
+  - `IntelReport` (pydantic): `{company, website|None, generated_at, mode: "live"|"snapshot", sections: {direction: [Claim], sustainability: [Claim], trends: [Claim], how_lindstrom_helps: [{offer_id, offer_name, why, based_on: [str]}], conversation_starters: [str]}, sources: [{url, title, date}], disclaimer}`. `Claim = {text, source_url, source_date}`.
+  - `research_company(company: str, website: str | None, use_llm: bool) -> IntelReport`:
+    - live path: Anthropic Messages API, model `claude-sonnet-5-5`, tools = the server web search tool `{"type": "web_search_20250305", "name": "web_search", "max_uses": 8}` plus a `submit_report` tool with the JSON schema; the final answer must come via `submit_report`;
+    - code drops claims without an http(s) source_url, and drops how_lindstrom_helps items whose offer_id is not in `config/service_catalogue.yaml`;
+    - 60 s timeout;
+    - live results cached in `data/intel_cache/<slug>.json`.
+    - Fallback: if use_llm is False or the call fails and a snapshot exists for the slug → the snapshot (mode "snapshot"); otherwise raise `IntelUnavailable`.
+  - `list_snapshots() -> list[{slug, company, generated_at}]`.
+  - API: `POST /intel {company, website?}` → IntelReport (503 with a clear message on IntelUnavailable); `GET /intel/snapshots`.
+  - The disclaimer, exactly: "AI-generated from public sources — verify before use. Example public company; no relationship with Lindström is implied."
+- **Snapshot:** research **Fazer Group** with web search now: recent strategy/expansion, sites/workforce, sustainability targets and reporting, 2–4 food-industry trends. Use real URLs and dates only; never invent facts. Map 3–5 items to catalogue offers; write 4 conversation starters. Set mode "snapshot", generated_at "2026-11-07".
+
+- [ ] **Step 1: Failing tests** in `tests/test_intel.py` (no network; a mocked Anthropic client):
+  - `test_snapshot_valid` (parses; every claim has an http source_url; offer_ids are in the catalogue; ≥ 3 sources)
+  - `test_live_path_drops_unsourced_claims`
+  - `test_live_path_drops_unknown_offer`
+  - `test_fallback_to_snapshot_without_key`
+  - `test_unknown_company_without_key_503`
+  - `test_intel_snapshots_endpoint`
+- [ ] **Step 2:** Run → FAIL. **Step 3:** Implement + research the snapshot. **Step 4:** Run → PASS + full suite. **Step 5:** Commit `feat: account intelligence with sourced live research and Fazer snapshot`.
+
+### Task 8: Frontend A: story landing, simple/expert mode, glossary, service-line filter, export menu
+
+**Files:** Modify `web/index.html`, `web/app.js`, `web/modules.js`, `web/styles.css`, `config/modules.json`, `tests/test_modules.py`.
+
+- **Customer story** = the new default page (top of the nav). It shows the cards from `review.story`: title, big statement, relatable line (small, "illustrative"), a "What to say" box with a copy-to-clipboard button, and a "Show the detail" link to `detail_view`.
+- **Simple / Expert toggle** in the header, default Simple, persisted in localStorage.
+  - Simple hides z-scores, the method-status/provenance badges (one "estimate" pill for ESTIMATED values), lineage and formula text in drawers. Ranges read "about X (between A and B)".
+  - Expert shows everything.
+- **Glossary:** marked terms get a dotted underline + a tooltip from `/config/glossary`.
+- **Service line** select (All + `meta.service_lines`) → `service_line`.
+- **Export** button → menu: PowerPoint · PDF · Excel (a 400 → "Export available soon").
+- [ ] **Step 1:** Update `test_modules.py` for the new components → FAIL → update modules.json → PASS.
+- [ ] **Step 2:** Implement.
+- [ ] **Step 3: Browser check** (port 8000):
+  1. The story landing renders.
+  2. The toggle changes the badges.
+  3. A tooltip shows.
+  4. The service-line select works for the hotel (extensions on).
+  5. No console errors.
+- [ ] **Step 4:** Commit `feat: customer story landing, simple mode, glossary, service-line filter, export menu`.
+
+### Task 9: Frontend B: DIY comparison, growth, account intelligence, fit page
+
+**Files:** Create `config/lindstrom_fit.yaml`. Modify `api/main.py` (`GET /config/fit`), `web/*`, `config/modules.json`, `tests/test_api.py` (`test_fit_config`).
+
+- **Service vs do-it-yourself page:**
+  - 4 columns: Environment, Cost, Time, Hygiene;
+  - the cost-breakdown chart;
+  - the "uses figures entered by the account manager" chip;
+  - the "Your numbers" panel (KAM only): defaults prefilled, low/high, source badge, Save/Reset;
+  - comma → dot, blank → omitted, the 422 message inline;
+  - the customer audience sees a read-only inputs table.
+- **Growth opportunities page:**
+  - inputs: extra sites, extra wearers, service-line checkboxes from `/config/service-catalogue`, optional expansion price;
+  - lever cards (€ avoided, hours, CO₂, water as "about X (A–B)");
+  - the narrative line with a copy button.
+- **Account intelligence page:**
+  - a company + website form;
+  - snapshot chips from `/intel/snapshots` (Fazer Group preselected);
+  - sections with a source link per claim;
+  - the "How Lindström can help" cards and conversation starters;
+  - the disclaimer banner and a mode badge ("Live" / "Snapshot from …");
+  - for the fictional accounts, a note "fictional customer — try the example public company".
+- **Built on Lindström's work page:** `config/lindstrom_fit.yaml`, with the 8 asset rows and the brief map per design §3. PUBLIC rows link:
+  - https://lindstromgroup.com/uk/article/bringing-greater-transparency-to-emissions-data-in-our-online-portal/
+  - https://lindstromgroup.com/sustainability-goes-digital/
+  - https://d2ris6qfzcz0wn.cloudfront.net/wp-content/uploads/sites/8/2026/04/Lindstrom-Sustainability-Report-2025.pdf
+
+  It carries the note "Public facts are context only — never calculation inputs".
+- [ ] **Step 1:** `test_fit_config` (≥ 8 assets; PUBLIC rows have an http source) → FAIL → implement → PASS.
+- [ ] **Step 2:** Implement the UI.
+- [ ] **Step 3: Browser check:**
+  1. Contract price 120000 → net appears.
+  2. "2,5" is accepted.
+  3. Growth with 4 sites + Mats → levers appear.
+  4. The intel page shows the Fazer snapshot with sources.
+  5. The fit page renders.
+  6. The customer audience gets read-only inputs.
+  7. No console errors.
+- [ ] **Step 4:** Commit `feat: DIY, growth, account intelligence and fit pages`.
+
+### Task 10: PDF and Excel export; PPTX story, DIY and growth slides
+
+**Files:** Create `export/pdf_builder.py`, `export/xlsx_builder.py`, `tests/test_exports_more.py`. Modify `export/pptx_builder.py`, `api/main.py`, `tests/test_export.py`.
+
+- **Deck/PDF order:** Cover · **Customer story** · Executive summary · Value KPIs · Footprint vs baseline · **Service vs do-it-yourself** · **Growth opportunities** (only if `growth` is present) · Site highlights · Observations · Discussion & actions · Methodology · Appendix. That is 11 slides, or 12 with growth; update the counts in `test_export.py`.
+- `build_pdf(review, out_path) -> Path`: reportlab, A4 landscape, DejaVuSans registered, footer with the disclaimer + run_id.
+- `build_xlsx(review, out_path) -> Path`, with sheets Summary, Story, KPIs, Sites, Observations, Actions, DIY comparison, Growth (if present), Inputs, Assumptions, Data quality.
+- `/reviews/export` `format` ∈ {pptx, pdf, xlsx}, with MIME types `application/pdf` and `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`. Filename `review_{id}_{period}.{ext}`.
+- [ ] **Step 1: Failing tests:**
+  - `test_pdf_has_sections` ("Customer story", "Service vs do-it-yourself", "Methodology", the disclaimer)
+  - `test_pdf_unicode` ("Kraków")
+  - `test_xlsx_sheets`
+  - `test_xlsx_kpi_matches_api` (co2_saving_kg at sens "low")
+  - `test_xlsx_unicode` ("Łódź")
+  - `test_xlsx_customer_audience` (no "idle_stock_value_eur")
+  - `test_export_formats_api` (3 formats 200; "docx" 400)
+  - `test_pptx_story_first` (slide 2 title "Customer story")
+  - `test_pptx_growth_slide_when_inputs`
+- [ ] **Step 2:** Run → FAIL. **Step 3:** Implement. **Step 4:** Run → PASS + full suite. **Step 5:** Commit `feat: PDF and Excel exports; story, DIY and growth in the decks`.
+
+### Task 11: Pitch deck and docs
 
 **Files:** Create `scripts/make_pitch_deck.py`, `docs/pitch/ValueReview_pitch.pptx`, `tests/test_pitch.py`. Modify `README.md`, `docs/demo_script.md`, `docs/methodology.md`, `docs/data_readiness.md`.
 
-- [ ] **Step 1:** `tests/test_pitch.py::test_pitch_deck` builds the deck to tmp_path and asserts 6 slides, with the titles in this order:
+- Pitch slides (titles, in order):
   1. "What you asked"
   2. "Built on Lindström's work"
-  3. "How it works"
-  4. "Credible by design"
-  5. "Grows with your business"
-  6. "Exports & path to production"
+  3. "Easy to explain: the customer story"
+  4. "Save more by working with us more"
+  5. "Knows where your customers are going"
+  6. "Credible by design"
+  7. "Grows with your business"
+  8. "Exports & path to production"
 
-  It also asserts the disclaimer is on every slide. Run → FAIL.
-- [ ] **Step 2:** Implement the script (content per design §6; reads `config/lindstrom_fit.yaml` for slide 2; slide 4 includes the L003 example and "AI never writes numbers"; slide 5 the Mats/Hospitality/Estonia + Washroom/Latvia proof; slide 6 the three exports + Tier 0→3 + Q35 + the service-vs-DIY comparison). Headline figures come from `build_review` for CUST001 (base, B_LOCAL) via `fmt_value`. Generate `docs/pitch/ValueReview_pitch.pptx` and commit it.
-- [ ] **Step 3:** Docs:
-  - README: rewrite "How to extend" as the extension-pack worked example (sources.yaml + CSV folder + industry rule) and point to `tests/test_extensibility.py`; add the env vars `VR_EXTENSIONS` and `VR_INPUTS_DIR`; the inputs endpoints; the export formats; reportlab in the deps.
-  - methodology: add the DTO formulas, the inputs table (T4–T11) and T3; state the limitations (no auth on inputs; no cross-border distance modelling).
-  - data_readiness: add rows for service line master data, industry master data and contract prices.
-  - demo_script: add the extension moment (30 s), the DIY page with a typed contract price (30 s) and the export menu. The total stays ≤ 4 min (trim elsewhere).
-- [ ] **Step 4:** Run the full suite. Expected: pass.
-- [ ] **Step 5:** Commit `docs: pitch deck, extension worked example, DIY methodology`.
+  The disclaimer is on every slide. Headline figures come from `build_review` CUST001 via `fmt_value`. Slide 5 uses the Fazer snapshot with sources.
+- [ ] **Step 1:** `test_pitch_deck` (8 slides, titles in order, the disclaimer on each) → FAIL.
+- [ ] **Step 2:** Implement the script; generate and commit the deck.
+- [ ] **Step 3: Docs:**
+  - README: the extension worked example; `VR_EXTENSIONS`, `VR_INPUTS_DIR`; the inputs, intel and catalogue endpoints; the export formats; the new deps.
+  - methodology: DTO + growth formulas, inputs T4–T16, T3, relatable factors with sources, the AI intel guardrails, the limitations.
+  - data_readiness: service line / industry master data, contract prices, CRM legal names for intel.
+  - demo_script ≤ 4 min:
+    1. story landing (Simple);
+    2. DIY with a typed contract price;
+    3. growth;
+    4. Fazer intel;
+    5. extension (hotel, Mats, Estonia);
+    6. export menu;
+    7. Expert toggle → credibility.
+- [ ] **Step 4:** Full suite → PASS. **Step 5:** Commit `docs: pitch deck and updated docs`.
+
+## Cut list (if behind schedule; first cut first)
+1. Excel export (Task 10)
+2. The Latvia part of Task 3 (keep Washroom)
+3. Glossary tooltips (Tasks 5/8)
+4. The live-web path of Task 7 (keep the snapshot)
+5. The fit page UI (keep the pitch slide)

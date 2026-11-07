@@ -218,6 +218,75 @@ Per account, period-scaled (annual inputs × months/12):
    - the contract price is shown in the customer view only if entered.
 9. **Validation:** allowed keys are each input key plus `<key>_low` / `<key>_high`. Anything else, negative numbers, or low > high → 422.
 
+## 8b. Round-3 feedback (added 2026-11-07, later the same day) [User]
+
+Lindström wants **our imagined solution** (vision), demoed where possible. Three needs:
+1. A dashboard that helps their team **show customers they can save more money by working with Lindström more**.
+2. **AI that knows where customer companies are going**: their direction, new trends, and how Lindström can help.
+3. Dashboards **easy to understand and explain** for account managers talking to customers.
+
+### G7: Growth opportunities ("work with us more")
+- **What:** a page plus a deck/PDF section. It estimates the extra savings if the customer moves more to Lindström. Three levers:
+  - (a) **more sites**: sites not yet served, entered by the KAM;
+  - (b) **more employees on the service**: wearers not yet covered, entered by the KAM;
+  - (c) **service lines not yet used**: chosen from the service catalogue, e.g. Mats, Washroom, Cleanroom.
+- **Sizing** (engine, `metrics/growth.py`, all ESTIMATED with low/base/high):
+  - per-site and per-wearer averages come from the customer's **own** current data (washed kg, garments, DIY cost lines from G6, CO₂/water savings);
+  - each lever scales those averages;
+  - for a new service line, typical kg/site/month and price come from `config/service_catalogue.yaml` (illustrative defaults, assumption ids T12+), overridable by the KAM;
+  - the output per lever and in total: extra DIY cost avoided (€ range), and net only if a contract price per site/wearer was entered; staff hours freed; water/CO₂ saved. Never one combined score.
+- **Inputs:** stored with the G6 inputs (same store, same validation): `extra_sites`, `extra_wearers`, `extra_service_lines[]`, optional `expansion_price_eur_per_site_year`.
+- **Default narrative line** (code-filled): "Bringing {extra_sites} more sites on board would avoid about {range} a year in laundry and garment costs and save {co2 range} CO₂e."
+
+### G8: Account intelligence (AI research on a real public company)
+- **What:** an "Account intelligence" page. The KAM types a company name (and optionally a website). The page shows:
+  - **Where they're going** (strategy, expansion/closures, sites, workforce, M&A);
+  - **Sustainability & reporting** (targets, CSRD/Scope 3 duties);
+  - **Industry trends** (2–4);
+  - **How Lindström can help** (each item mapped to an offering in `config/service_catalogue.yaml`, with a one-line "why");
+  - **Conversation starters** for the next customer meeting.
+- **How:**
+  - the server calls Claude (`claude-sonnet-5-5`) with the **web search tool** (the Anthropic server-side web_search tool), restricted to recent public sources;
+  - the output is forced through a JSON schema in which **every claim carries a source URL and a date**, and claims without a source are dropped by code;
+  - the Lindström mapping may only reference catalogue items;
+  - no numbers from our engine are mixed in.
+- **Guardrails:**
+  - a "AI-generated from public sources — verify before use" banner;
+  - the sources list is always visible;
+  - results are cached per company with a timestamp in `data/intel_cache/` (gitignored, except the committed demo snapshot);
+  - a 60 s timeout;
+  - it doesn't claim the company is a Lindström customer: "Example public company — no relationship implied".
+- **No-key fallback:** a committed **snapshot** for one real example company, researched on 2026-11-07 with real sources, in `data/intel_snapshots/<slug>.json`. It's shown with "Snapshot from 2026-11-07" when there is no API key or the live call fails. [Call: example company **Fazer Group** (Finnish food & bakery; a natural workwear/hygiene fit); the user can change it.]
+- **Fictional customers:** the page for NorthStar/Apex/Mediora explains that they are fictional and offers the example company. In production, the account's legal name would come from CRM.
+- **Endpoints:** `POST /intel {company, website?}` → IntelReport; `GET /intel/snapshots` → the list.
+
+### G9: Easy to explain (Customer story + simple mode)
+- **Customer story page** (the new default landing page): 5 plain-language "headline cards", each with:
+  1. a big statement with the number (from the ReviewModel);
+  2. a relatable comparison (e.g. water m³ → "≈ N households' yearly water use", CO₂ t → "≈ N cars driven for a year"). The conversion factors live in `config/relatable.yaml`, are sourced, and are labelled "illustrative comparison";
+  3. **"What to say"**: a one-sentence talking point (template, code-filled);
+  4. a "Show the detail" link to the existing page.
+- Cards:
+  1. Value delivered;
+  2. vs do-it-yourself (G6);
+  3. biggest improvement;
+  4. growth opportunity (G7);
+  5. what's next (top action).
+- **Simple / Expert toggle** (default Simple):
+  - Simple hides z-scores, method-status badges (a single "estimate" pill instead), lineage and formula text;
+  - Expert shows everything as today;
+  - ranges stay visible in both, as "about X (between A and B)".
+- **Glossary tooltips** on terms (baseline, allocation, Scope 3, utilisation) from `config/glossary.yaml`.
+- The PPTX/PDF lead with the Customer story slide.
+
+### Priority under the Sunday 10:00 deadline [Call]
+Build order: Task 1–4 (as planned) → **G9 story + simple mode** → **G7 growth** → **G8 intelligence (snapshot first, then live)** → exports (PDF/xlsx, incl. story + growth) → fit page → pitch + docs.
+If time runs short, cut in this order:
+1. Excel export;
+2. the zero-code proof test's Latvia part (keep Washroom);
+3. glossary tooltips;
+4. the live-web part of G8 (keep the snapshot).
+
 ## 9. Left to the builder
 reportlab layout details; exact CSV column order (must match canonical names); the synthetic volumes for the extension pack (within the C1 constraint); the pitch deck's visual details; the fit page's styling (reuse existing card/table styles).
 
