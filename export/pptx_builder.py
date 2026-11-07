@@ -244,7 +244,7 @@ def _step2(prs, review, n, step):
     rows = step["lines"]
     wrapped = sum(1 for r in rows if len(r[0]) > 52)  # long labels wrap to a second line
     row_h = _fit_row_h(len(rows) + 1 + wrapped * 0.6, top, BODY_END, 0.36)
-    _table(slide, MARGIN, Inches(top), [5.0, 1.2, 1.8], rows, ["Per year", "Value", "Range (low – high)"],
+    _table(slide, MARGIN, Inches(top), [5.0, 1.2, 1.8], rows, [step["lines_header"], "Value", "Range (low – high)"],
            size=11, row_h=row_h, header_size=11)
     x, w = Inches(8.75), Inches(3.98)
     _, tf = _textbox(slide, x, Inches(top), w, Inches(0.35))

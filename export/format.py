@@ -3,6 +3,7 @@ the story cards and tests)."""
 from __future__ import annotations
 
 import math
+from decimal import ROUND_HALF_UP, Decimal
 
 
 def _scale(value: float, unit: str) -> tuple[float, str, int, float]:
@@ -51,38 +52,51 @@ def fmt_range(metric) -> str:
 
 
 # ---------------------------------------------------------------- compact style (meeting flow)
-# Mirrored by fmtCompact in the web UI; vectors in tests/test_format.py. Each tier rounds first
+# Mirrored by fmtCompact in the web UI; vectors in tests/test_format.py. Rounding is half-up on the
+# shortest decimal text (as JS toLocaleString). Each tier rounds first
 # and then promotes the unit, so 999,999 EUR reads "€1.00M", not "€1,000k".
 MINUS = "−"  # U+2212
 NO_VALUE = "—"
 
 
+def _half_up(a: float, dp: int = 0) -> Decimal:
+    """`a` rounded to `dp` decimals with exact .5 ties going up, from its shortest decimal text
+    (repr), as the browser's toLocaleString does: 12.5 -> 13, 1.005 -> 1.01, 9.95 -> 10.0.
+    Python's own round() and format() would round those ties to even or by binary value."""
+    return Decimal(repr(float(a))).quantize(Decimal(1).scaleb(-dp), rounding=ROUND_HALF_UP)
+
+
+def _g(a: float, dp: int = 0) -> str:
+    """Thousands-grouped text of `a` at `dp` decimals, half-up (the JS grp)."""
+    return f"{_half_up(a, dp):,.{dp}f}"
+
+
 def compact_num(a: float) -> str:
     """A plain compact count: 0 dp from 10 up (67, 230, 1,152), else 1 dp without a trailing zero."""
-    return f"{a:,.0f}" if round(a, 1) >= 10 else f"{a:,.1f}".rstrip("0").rstrip(".")
+    return _g(a, 0) if _half_up(a, 1) >= 10 else _g(a, 1).rstrip("0").rstrip(".")
 
 
 def _compact_abs(a: float, unit: str) -> str | None:
     """Compact text for a non-negative value; None when the unit has no compact rule."""
     if unit == "EUR":
-        if round(a) < 10_000:
-            return f"€{a:,.0f}"
-        if round(a / 1000) < 1000:
-            return f"€{a / 1000:,.0f}k"
-        return f"€{a / 1e6:,.2f}M"
+        if _half_up(a) < 10_000:
+            return f"€{_g(a)}"
+        if _half_up(a / 1000) < 1000:
+            return f"€{_g(a / 1000)}k"
+        return f"€{_g(a / 1e6, 2)}M"
     if unit == "l":
-        return f"{a / 1000:,.0f} m³"
+        return f"{_g(a / 1000)} m³"
     if unit == "kgCO2e":
-        if round(a) < 1000:
-            return f"{a:,.0f} kg CO₂e"
+        if _half_up(a) < 1000:
+            return f"{_g(a)} kg CO₂e"
         t = a / 1000
-        return f"{t:,.0f} t CO₂e" if round(t, 1) >= 10 else f"{t:,.1f} t CO₂e"
+        return f"{_g(t)} t CO₂e" if _half_up(t, 1) >= 10 else f"{_g(t, 1)} t CO₂e"
     if unit == "h":
-        return f"{a:,.0f} h"
+        return f"{_g(a)} h"
     if unit == "kWh":
-        return f"{a / 1000:,.0f} MWh" if round(a) >= 1000 else f"{a:,.0f} kWh"
+        return f"{_g(a / 1000)} MWh" if _half_up(a) >= 1000 else f"{_g(a)} kWh"
     if unit == "ratio":
-        return f"{a * 100:,.1f}%"
+        return f"{_g(a * 100, 1)}%"
     if unit == "kg/wearer":
         return f"{compact_num(a)} kg per wearer"
     if unit.startswith("per 100"):

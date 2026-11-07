@@ -16,6 +16,9 @@ VECTORS = [
     # site figures (step 3 tiles, same text as the story statement)
     (67.0175, "kg/wearer", "67 kg per wearer"), (48.81, "kg/wearer", "49 kg per wearer"),
     (230.4, "per 100 wearers", "230 per 100 wearers"), (4.3, "per 100 wearers", "4.3 per 100 wearers"),
+    # exact .5 ties round half up, as JS toLocaleString does (not Python's round-half-even)
+    (12500, "EUR", "€13k"), (1005000, "EUR", "€1.01M"), (9.95, "kg/wearer", "10 kg per wearer"),
+    (2500.5, "EUR", "€2,501"), (0.0125, "ratio", "1.3%"),
     # non-finite values are a dash
     (float("nan"), "EUR", "—"), (float("inf"), "kgCO2e", "—"), (float("-inf"), "h", "—"),
 ]

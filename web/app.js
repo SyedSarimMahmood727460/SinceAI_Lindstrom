@@ -78,22 +78,26 @@ function reviewQuery(extra) {
   return `/accounts/${encodeURIComponent(S.account)}/review?${p}`;
 }
 
+/** Fetch and render the review; resolves true when this load rendered, false when it failed or a
+ * newer load superseded it. */
 async function load() {
   const seq = ++reqSeq;
   busy(true);
   try {
     const r = await getJSON(reviewQuery());
-    if (seq !== reqSeq) return;
+    if (seq !== reqSeq) return false;
     R = r;
     (R.meta.products || []).forEach(p => { productNames[p.id] = p.name; });
     if (S.site && !R.sites.some(s => s.node_id === S.site)) S.site = null;
     render();
     if (S.site) loadSite();
     if (!EXT.storedGrowth[S.account]) {  // growth form prefill, also a lone stored expansion price
-      fetchStoredGrowth().then(g => { if (g && seq === reqSeq && (S.view === 'growth' || S.view === 'meeting')) renderPage(); });
+      fetchStoredGrowth().then(g => { if (g && seq === reqSeq && (S.view === 'growth' || S.view === 'meeting')) renderPageKeepFocus(); });
     }
+    return true;
   } catch (e) {
     if (seq === reqSeq) toast(`Could not load the review (${e.message})`, true);
+    return false;
   } finally {
     if (seq === reqSeq) busy(false);
   }
@@ -226,7 +230,11 @@ function pageHead() {
 
 function renderPage() {
   if (!R) return;
-  document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.v === S.view));
+  document.querySelectorAll('nav a').forEach(a => {
+    const on = a.dataset.v === S.view;
+    a.classList.toggle('on', on);
+    if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
   $('pageHead').innerHTML = pageHead();
   Object.keys(charts).forEach(id => { charts[id].destroy(); delete charts[id]; });
   VR.resetLocal();
@@ -256,6 +264,19 @@ function renderPage() {
   $('page').innerHTML = out.join('') || '<div class="mod"><div class="card empty">No modules for this page.</div></div>';
   if (window.Chart) pending.forEach(c => mkChart(c));
   else if (pending.length) toast('Charts unavailable (Chart.js did not load)', true);
+}
+
+/** Re-render after background data arrives (catalogue, stored growth inputs) without dropping the
+ * keyboard: focus that was inside the page goes back to the current step button (if it was in the
+ * step bar) or the step title. */
+function renderPageKeepFocus() {
+  const a = document.activeElement, inPage = !!(a && a !== document.body && $('page').contains(a));
+  const inBar = inPage && !!a.closest('.msteps');
+  renderPage();
+  if (inPage && !$('page').contains(document.activeElement)) {
+    if (S.view === 'meeting') focusStep(S.step, inBar);
+    else { const h = document.querySelector('#pageHead h1'); if (h) { h.tabIndex = -1; h.focus({preventScroll: true}); } }
+  }
 }
 
 // ---------- meeting flow steps ----------
@@ -296,20 +317,26 @@ function stepKey(e) {
   return true;
 }
 
-/** The account's base-case do-it-yourself total for the whole account (no product or service-line
- * filter): dto.diy_total.range.base, fetched unfiltered when a filter is active. */
-async function unfilteredDiyBase(acct) {
+/** The demo's reference: the account's do-it-yourself total for the full year (2025-Q2 -> 2025), the
+ * whole account (no product or service-line filter), base sensitivity, local-laundry baseline (B_LOCAL):
+ * dto.diy_total.range.base. The current review is used only when it already is exactly that view;
+ * otherwise that view is fetched, so the demo contract is the same whatever quarter or filter is on screen. */
+const DEMO_BASELINE = 'B_LOCAL';
+async function demoDiyBase(acct) {
+  const year = String(S.period).slice(0, 4);
   let r = R;
-  if (S.product || S.serviceLine) {
-    const p = new URLSearchParams({period: S.period, baseline: S.baseline, sens: 'base', audience: S.audience});
+  const same = R && S.period === year && !S.product && !S.serviceLine && S.sens === 'base' && S.baseline === DEMO_BASELINE;
+  if (!same) {
+    const p = new URLSearchParams({period: year, baseline: DEMO_BASELINE, sens: 'base', audience: S.audience});
     r = await getJSON(`/accounts/${encodeURIComponent(acct)}/review?${p}`);
   }
   const t = r && r.dto && r.dto.diy_total;
   const base = t && t.range && t.range.base != null ? t.range.base : null;
   return base != null && isFinite(base) ? base : null;
 }
-/** Demo scenario (design §6, controller ruling): contract price = 60% of the account's base, unfiltered
- * do-it-yourself total, to the nearest €10,000 (skipped when there is none); 4 more sites; mats, or
+/** Demo scenario (design §6, controller ruling): contract price = 60% of the account's full-year, unfiltered,
+ * base-case, local-laundry do-it-yourself total (demoDiyBase), to the nearest €10,000 (skipped when there
+ * is none), so it is the same on 2025 and on 2025-Q2; 4 more sites; mats, or
  * washroom if the account already uses mats. Merged into the stored inputs (stored entries win; the
  * demo service line is added), then the full set is PUT. The toast follows the reloaded review. */
 async function loadDemo(btn) {
@@ -318,7 +345,7 @@ async function loadDemo(btn) {
   if (btn) { btn.disabled = true; btn.textContent = 'Loading demo…'; }
   try {
     const [st, cat, base] = await Promise.all([getJSON(`/accounts/${encodeURIComponent(acct)}/inputs?include=growth`),
-      catalogue(), unfilteredDiyBase(acct)]);
+      catalogue(), demoDiyBase(acct)]);
     if (acct !== S.account) return;
     const used = new Set(R.meta.service_lines || []);
     const mats = (cat || []).find(c => c.id === 'mats');
@@ -328,7 +355,7 @@ async function loadDemo(btn) {
     const g = growthBody(st.growth);
     const body = {...demo, ...diyStored(st.inputs), ...g};
     body.extra_service_lines = [...new Set([...(g.extra_service_lines || []), line])];
-    await saveInputs(body, null, 'Demo scenario loaded — example numbers; edit or reset in Your numbers.', true);
+    await saveInputs(body, null, "Demo scenario loaded — example numbers; reset with 'Reset to defaults' in Your numbers and 'Clear' in step 4.");
   } catch (e) {
     toast(`Could not load the demo scenario (${e.message})`, true);
   } finally { if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = 'Load demo scenario'; } }
@@ -348,7 +375,7 @@ function catalogue() {
 // ---------- DIY, growth, intelligence and fit pages ----------
 /** Load what a page needs once (fit content, service catalogue, intel snapshots), then re-render. */
 function ensurePageData(view) {
-  const rerender = () => { if (S.view === view) renderPage(); };
+  const rerender = () => { if (S.view === view) renderPageKeepFocus(); };
   if (view === 'fit' && EXT.fit === undefined && !EXT.fitLoading) {
     EXT.fitLoading = true;
     getJSON('/config/fit').then(f => { EXT.fit = f; }).catch(e => { EXT.fit = null; toast(`Could not load the page (${e.message})`, true); })
@@ -502,9 +529,9 @@ function showFormError(form, detail) {
   } else general.innerHTML = `<span class="err">${esc(msg)}</span>`;
 }
 
-/** PUT replaces the whole stored set, so every save sends the DIY and the growth inputs together. */
-/** `toastAfterReload`: show `done` once the review has reloaded (the demo scenario). */
-async function saveInputs(body, form, done, toastAfterReload = false) {
+/** PUT replaces the whole stored set, so every save sends the DIY and the growth inputs together.
+ * `done` is toasted only once the review has reloaded successfully; otherwise an error toast. */
+async function saveInputs(body, form, done) {
   const btns = form ? [...form.querySelectorAll('button')] : [];
   btns.forEach(b => { b.disabled = true; });
   try {
@@ -518,9 +545,8 @@ async function saveInputs(body, form, done, toastAfterReload = false) {
   ['extra_sites', 'extra_wearers', 'extra_service_lines', 'expansion_price_eur_per_site_year'].forEach(k => { if (k in body) g[k] = body[k]; });
   GROWTH_SENT[S.account] = Object.keys(g).length ? g : null;
   delete EXT.storedGrowth[S.account];
-  if (!toastAfterReload) toast(done);
-  await load();
-  if (toastAfterReload) toast(done);
+  if (await load()) toast(done);
+  else toast('Saved, but the review could not be refreshed — reload the page to see the new figures', true);
 }
 
 async function onSubmit(e) {
@@ -836,7 +862,7 @@ document.addEventListener('click', e => {
   else if (d.prompt) runPrompt(d.prompt);
   else if (d.closeSite) { S.site = null; siteReview = null; renderPage(); }
 });
-document.querySelectorAll('nav a').forEach(a => { a.onclick = () => go(a.dataset.v); });
+document.querySelectorAll('nav a[data-v]').forEach(a => { a.onclick = e => { e.preventDefault(); go(a.dataset.v); }; });
 $('drawerX').onclick = closeDrawer;
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {

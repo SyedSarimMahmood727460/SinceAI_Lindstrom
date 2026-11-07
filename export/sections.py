@@ -6,6 +6,8 @@ show the same text. Builders decide layout; this module decides wording.
 """
 from __future__ import annotations
 
+import re
+
 from export.format import fmt_compact, fmt_compact_range, fmt_compact_value, fmt_number, fmt_range, fmt_value
 
 WARN = "⚠"
@@ -226,7 +228,12 @@ def _step1(review, cards):
             "what_to_say": card.get("what_to_say", "")}
 
 
-def _net_tile(net) -> dict:
+def per_period(period: str) -> str:
+    """'per year' for a full-year review ('2025'), else 'in 2025-Q3': a quarter is not a year."""
+    return "per year" if re.fullmatch(r"\d{4}", str(period)) else f"in {period}"
+
+
+def _net_tile(net, per: str = "per year") -> dict:
     """The net (do-it-yourself total minus the contract) in plain words: a saving with Lindström,
     or an extra cost when the headline is negative (then the figures are shown as positive)."""
     saving = net.value >= 0
@@ -240,15 +247,16 @@ def _net_tile(net) -> dict:
     crosses = bool(rng) and min(r.low, r.high) < 0 < max(r.low, r.high)
     return {"label": "Saving with Lindström" if saving else "Extra cost with Lindström",
             "value": fmt_compact(sign * net.value, net.unit), "range": rng,
-            "context": "per year · depends on the assumptions" if crosses else "per year"}
+            "context": f"{per} · depends on the assumptions" if crosses else per}
 
 
 def _step2(review, cards):
     d = review.dto
     card = cards.get("vs_diy") or {}
+    per = per_period(review.meta.period)
     step = {"n": 2, "title": STEP_TITLES[2], "statement": card.get("statement", ""),
             "what_to_say": card.get("what_to_say", ""), "tiles": [], "lines": [], "bars": [], "notes": [],
-            "bars_title": ""}
+            "bars_title": "", "lines_header": per[0].upper() + per[1:]}
     if d is None or not _present(d.diy_total):
         return {**step, "message": "No do-it-yourself comparison for this filter"}
     net = d.net if _present(d.net) else None
@@ -257,10 +265,10 @@ def _step2(review, cards):
         from insights.story import signed_about  # the story's honest wording when the range crosses zero
         text = signed_about(net, "less", "more", " with Lindström than doing it yourself")
         step["message"] = text[0].upper() + text[1:]
-        step["tiles"].append(_net_tile(net))
+        step["tiles"].append(_net_tile(net, per))
     else:
-        step["message"] = f"Doing it yourself would cost about {fmt_compact_value(d.diy_total)} a year"
-    step["tiles"].append(_tile("Doing it yourself would cost", d.diy_total, "per year"))
+        step["message"] = f"Doing it yourself would cost about {fmt_compact_value(d.diy_total)} {per}"
+    step["tiles"].append(_tile("Doing it yourself would cost", d.diy_total, per))
     hours = (d.convenience or {}).get("staff_hours_freed")
     if _present(hours):
         step["tiles"].append(_tile("Staff hours freed", hours, "of your staff's time"))
@@ -272,7 +280,7 @@ def _step2(review, cards):
         step["lines"].append(["Lindström contract price", fmt_compact_value(contract), _bare_range(contract)])
         step["bars"].append(("Lindström contract", contract.value, fmt_compact_value(contract)))
     step["bars"].append(("Doing it yourself", d.diy_total.value, fmt_compact_value(d.diy_total)))
-    step["bars_title"] = "Contract vs doing it yourself" if contract is not None else "Doing it yourself, per year"
+    step["bars_title"] = "Contract vs doing it yourself" if contract is not None else f"Doing it yourself, {per}"
     if d.missing_lines:
         labels = {x.id: x.label for x in d.lines}
         step["notes"].append("Partial total: no data for "

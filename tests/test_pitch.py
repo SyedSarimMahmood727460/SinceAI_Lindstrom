@@ -71,6 +71,8 @@ def test_pitch_deck(tmp_path, con, pack_path):
         assert fmt_compact_value(k[mid]) in story
     assert fmt_compact_range(k["co2_saving_kg"]) in story
     assert "About €788k less with Lindström" in story  # demo contract price: 60% of the DIY total
+    lines = [ln for t in _texts(slides[2]) for ln in t.splitlines()]
+    assert any(ln.startswith("net range €") for ln in lines)  # step 2: the range is the net's
     for step in ("1 · What you got", "2 · Vs doing it yourself", "3 · Where to improve",
                  "4 · Grow together", "5 · Agree next steps"):
         assert step in story

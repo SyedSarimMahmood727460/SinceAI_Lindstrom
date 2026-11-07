@@ -236,7 +236,7 @@ def _step2(review, st, step):
     out = _step_head(review, st, step)
     if not step["lines"]:
         return out + [_p("No comparison for this filter", st["h2"])]
-    table = _table(step["lines"], [95, 30, 45], st, ["Per year", "Value", "Range (low – high)"])
+    table = _table(step["lines"], [95, 30, 45], st, [step["lines_header"], "Value", "Range (low – high)"])
     side = [_p(step["bars_title"], st["h2"]), _bars(step["bars"], st)]
     side += [_p(t, st["small"]) for t in step["notes"]]
     t = Table([[table, side]], colWidths=[176 * mm, 91 * mm])

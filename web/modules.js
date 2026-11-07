@@ -287,13 +287,14 @@ const MEET = {
     }
     const diy = d.diy_total, net = d.net && d.net.value != null ? d.net : null;
     const cp = d.contract_price && d.contract_price.value != null ? d.contract_price : null;
+    // a net range across zero is hedged in the title and labelled as such on the tile (as the export's signed wording)
+    const r = (net && net.range) || {}, straddles = !!net && r.low != null && r.high != null && Math.min(r.low, r.high) < 0 && Math.max(r.low, r.high) > 0;
     const title = net
-      ? `About ${fmtCompact(Math.abs(net.value), 'EUR')} ${net.value >= 0 ? 'less' : 'more'} with Lindström than doing it yourself`
+      ? `About ${fmtCompact(Math.abs(net.value), 'EUR')} ${net.value >= 0 ? 'less' : 'more'} with Lindström than doing it yourself${straddles ? ' — depends on the assumptions' : ''}`
       : `Doing it yourself would cost about ${fmtCompact(diy.value, diy.unit)} in ${R.meta.period}`;
     const conv = d.convenience || {}, hrs = conv.staff_hours_freed;
     const tiles = [];
-    if (net) {  // signed value next to its signed range; a range across zero is labelled as such
-      const r = net.range || {}, straddles = r.low != null && r.high != null && Math.min(r.low, r.high) < 0 && Math.max(r.low, r.high) > 0;
+    if (net) {  // signed value next to its signed range
       tiles.push(mTile(straddles ? 'Difference (estimate)' : (net.value >= 0 ? 'Less with Lindström' : 'Do-it-yourself minus Lindström'), net, node,
         'do-it-yourself total minus the Lindström contract', {cls: 'money'}));
     }
@@ -319,9 +320,15 @@ const MEET = {
   3(ctx) {
     const {R} = ctx, c = storyCard(R, 'biggest_improvement');
     const obs = R.observations.filter(o => o.rule_id !== 'R7' && o.rule_id !== 'R8');
+    const noData = !R.kpis.length || R.kpis.every(k => k.value == null);  // an empty filter is not "even"
+    if (noData) return {title: 'No site data for this filter', lead: 'Choose another product, service line or period in Settings.'};
     if (!obs.length) return {title: 'No site stands out — performance is even across sites.',
       support: '<button type="button" class="btn ghost" data-go="sites">See all sites</button>'};
     const f = c && c.facts, tiles = [];
+    // a short headline; the full statement is the lead line under it
+    const head = f && f.site_name && f.value != null && f.typical != null
+      ? `${f.site_name}: ${f.metric_label} ${f.value >= f.typical ? 'above' : 'below'} your other sites`
+      : obs[0].title.replace(' (relative)', '');
     if (f && f.value != null && f.typical != null) {
       const site = R.sites.find(s => s.name === f.site_name), mid = (c.value_refs || [])[0];
       const siteAttr = site && mid ? `data-explain="${esc(mid)}" data-node="${esc(site.node_id)}"` : '';
@@ -330,7 +337,7 @@ const MEET = {
         {attr: `data-evidence="${R.observations.indexOf(obs[0])}"`, range: ''}));
     }
     const next = obs.slice(1, 3).map(o => `<li><b>${esc(o.title)}</b><div class="small">Next step: ${esc(o.action)}</div></li>`).join('');
-    return {title: c ? c.statement : obs[0].title, long: true, tiles: tiles.length ? mTiles(tiles) : '',
+    return {title: head, lead: c ? c.statement : '', tiles: tiles.length ? mTiles(tiles) : '',
       support: `<div class="card mnext">${next ? `<h3>Also worth a look</h3><ul>${next}</ul>` : ''}
         <button type="button" class="btn ghost sm" data-go="sites">See all sites</button></div>`,
       say: c ? c.what_to_say : obs[0].action};
@@ -355,7 +362,9 @@ const MEET = {
     const levers = (g.levers || []).map(lv => `<li><b>${esc(lv.label)}</b><span>${[['diy_cost_avoided', 'avoided'], ['co2_saving_kg', ''], ['staff_hours_freed', 'freed']]
       .map(([key, w]) => { const m = lv[key], v = m && m.value != null ? fmtCompact(m.value, m.unit) : '';
         return /[1-9]/.test(v) ? `${esc(v)}${w ? ' ' + w : ''}` : ''; }).filter(Boolean).join(' · ')}</span></li>`).join('');
-    return {title: g.statement || 'Growing together', long: true,
+    const avoided = t.diy_cost_avoided;
+    return {title: avoided && avoided.value != null ? `Grow together: about ${fmtCompact(avoided.value, avoided.unit)} a year`
+      : 'What if more sites and services came to Lindström?', lead: g.statement || '',
       tiles: mTiles([mTile('Do-it-yourself cost avoided', t.diy_cost_avoided, node, per, {cls: 'money'}),
         mTile('CO₂e avoided', t.co2_saving_kg, node, per), mTile('Staff hours freed', t.staff_hours_freed, node, per)]),
       support: `<div class="card mnext"><h3>Levers</h3><ul class="mlevers">${levers}</ul>${notesH}</div>`,
@@ -396,8 +405,8 @@ const Components = {
       ${next ? `<button type="button" class="btn" data-step="${next}">Next: ${esc(name(next))} ▶</button>` : '<span></span>'}</div>`;
     return {html: `<div class="meeting" data-step-now="${step}"><h1 class="sr">Customer meeting: ${esc(ctx.R.meta.node.name)}, ${esc(ctx.R.meta.period)}</h1>
       <div class="msteps" role="group" aria-label="Meeting steps">${bar}${isCustomer ? '<span class="mpill" title="Internal figures and edit controls are hidden">Customer view</span>' : ''}</div>
-      <h2 class="mtitle ${s.long ? 'long' : ''}" tabindex="-1">${step} · ${esc(s.title)}</h2>
-      ${s.tiles || ''}${s.support || ''}${sayBox(s.say)}${nav}${s.after || ''}</div>`};
+      <h2 class="mtitle ${s.long ? 'long' : ''}" tabindex="-1">${step} · ${esc(s.title)}</h2>${s.lead ? `<p class="lead mlead">${gloss(s.lead)}</p>` : ''}
+      ${s.tiles || ''}${s.support || ''}${isCustomer ? '' : sayBox(s.say)}${nav}${s.after || ''}</div>`}; /* kam-only: say */
   },
 
   // Customer story (G9): plain-language headline cards from review.story; the statements are

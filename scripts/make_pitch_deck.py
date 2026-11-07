@@ -40,8 +40,8 @@ DISCLAIMER = "Prototype · synthetic data · not audited"
 BODY = 14  # minimum font size anywhere on a slide
 ACCOUNT = "CUST001"
 # The demo scenario a KAM types in (docs/demo_script.md uses the same values).
-# The contract price is what "Load demo scenario" computes for NorthStar: 60% of its base
-# do-it-yourself total (€1.96M), rounded to €10,000.
+# The contract price is what "Load demo scenario" computes for NorthStar: 60% of its full-year,
+# unfiltered, base-case do-it-yourself total against local laundry (€1.96M), rounded to €10,000.
 DEMO_INPUTS = {"contract_price_eur_per_year": 1_170_000, "extra_sites": 4,
                "extra_service_lines": ["mats"]}
 FIT_ROWS = 8  # Lindström assets on slide 2 (the brief row is on slide 1)
@@ -264,7 +264,7 @@ def _s3_story(prs, d, n):
         ("2 · Vs doing it yourself",
          [f"About {fmt_compact(dto.net.value, 'EUR')} less with Lindström",
           f"{fmt_compact_value(dto.diy_total)} do it yourself vs {fmt_compact_value(dto.contract_price)} contract"],
-         fmt_compact_range(dto.net)),
+         ("net " + fmt_compact_range(dto.net)) if fmt_compact_range(dto.net) else ""),
         ("3 · Where to improve",
          [f"{best['site_name']}: {best['value']:.0f} kg per wearer",
           f"Typical across sites: {best['typical']:.0f} kg"] if best else ["The site that stands out, in one sentence"],

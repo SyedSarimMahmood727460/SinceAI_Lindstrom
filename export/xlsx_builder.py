@@ -59,10 +59,12 @@ def build_xlsx(review, out_path: Path, audience: str = "kam") -> Path:
     disc = m.disclaimer
 
     # Meeting: one row per step of the guided meeting, in order (compact numbers)
+    # The customer copy carries no coaching: the "What to say" columns are KAM-only.
+    coach = audience != "customer"
     steps = meeting_steps(review)
-    ws = _sheet(wb, "Meeting", ["Step", "Message", "Figures", "What to say (account manager)"],
-                [[st["title"], st["message"], step_figures(st), st["what_to_say"]] for st in steps],
-                [26, 70, 70, 60], disc)
+    ws = _sheet(wb, "Meeting", ["Step", "Message", "Figures"] + (["What to say (account manager)"] if coach else []),
+                [[st["title"], st["message"], step_figures(st)] + ([st["what_to_say"]] if coach else []) for st in steps],
+                [26, 70, 70] + ([60] if coach else []), disc)
     ws.append([])
     ws.append([f"{disc} · run {m.run_id}"])
     ws.cell(ws.max_row, 1).font = Font(bold=True, color="D71920")
@@ -83,9 +85,9 @@ def build_xlsx(review, out_path: Path, audience: str = "kam") -> Path:
     ws["A2"].font = ws["B2"].font = Font(bold=True, color="D71920")
 
     # Story
-    _sheet(wb, "Story", ["Topic", "Statement", "Relatable comparison", "What to say"],
-           [[c["title"], c["statement"], c.get("relatable") or "", c.get("what_to_say") or ""]
-            for c in review.story], [30, 80, 50, 60], disc)
+    _sheet(wb, "Story", ["Topic", "Statement", "Relatable comparison"] + (["What to say"] if coach else []),
+           [[c["title"], c["statement"], c.get("relatable") or ""] + ([c.get("what_to_say") or ""] if coach else [])
+            for c in review.story], [30, 80, 50] + ([60] if coach else []), disc)
 
     # KPIs
     _sheet(wb, "KPIs", ["metric_id", "Label", "Unit", "Value", "Low", "Base", "High", "Display",

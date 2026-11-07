@@ -107,10 +107,11 @@ def _meeting_js() -> str:
 
 def test_meeting_customer_hides_controls():
     """Customer view: every edit control in the meeting flow (Your numbers form, demo button,
-    growth form, target inputs) sits behind an audience guard, marked /* kam-only */."""
+    growth form, target inputs) and the coaching box (What to say + Copy) sits behind an audience
+    guard, marked /* kam-only */."""
     code = _meeting_js()
     assert re.search(r"const isCustomer = ctx\.S\.audience === 'customer'", code)
-    for control in ("diy_inputs", "demo", "growth_inputs", "targets"):
+    for control in ("diy_inputs", "demo", "growth_inputs", "targets", "say"):
         lines = [ln for ln in code.splitlines() if f"/* kam-only: {control} */" in ln]
         assert lines, f"no kam-only guard for {control}"
         for ln in lines:
@@ -121,5 +122,37 @@ def test_meeting_customer_hides_controls():
             continue
         assert "Components.diy_inputs" not in ln and "Components.growth_inputs" not in ln, ln
         assert 'data-action="demo"' not in ln and "<input" not in ln, ln
+        # the coaching box is only rendered on a guarded line (its definition aside)
+        assert "sayBox(" not in ln or ln.lstrip().startswith("const sayBox"), ln
+    say = [ln for ln in code.splitlines() if "sayBox(s.say)" in ln]
+    assert say and all("isCustomer ? '' : sayBox(s.say)" in ln for ln in say)
     # step 4 drops out of the customer's step bar when there is no growth to show
     assert re.search(r"isCustomer && !hasGrowth", code)
+
+
+def test_meeting_short_titles_and_empty_filter():
+    """Steps 3 and 4 use short headlines with the full statement as the lead line; an empty filter
+    on step 3 says there is no data (not "even"); a net range across zero hedges the step-2 title."""
+    code = _meeting_js()
+    assert "your other sites`" in code and "lead: c ? c.statement : ''" in code
+    assert "`Grow together: about ${fmtCompact(avoided.value, avoided.unit)} a year`" in code
+    assert "lead: g.statement" in code and '<p class="lead mlead">' in code
+    assert "title: 'No site data for this filter'" in code
+    assert code.index("No site data for this filter") < code.index("performance is even across sites")
+    assert "${straddles ? ' — depends on the assumptions' : ''}" in code
+
+
+def test_app_demo_price_toasts_and_nav():
+    """The demo price reads the full-year, unfiltered, base, B_LOCAL review; saves toast only after a
+    successful reload; nav links are keyboard-reachable."""
+    app = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    body = app[app.index("async function demoDiyBase"):app.index("async function loadDemo")]
+    assert "String(S.period).slice(0, 4)" in body and "DEMO_BASELINE" in body and "sens: 'base'" in body
+    assert "product" not in body.split("new URLSearchParams")[1].split(")")[0]
+    assert "const DEMO_BASELINE = 'B_LOCAL'" in app
+    assert "if (await load()) toast(done);" in app and "return true;" in app and "return false;" in app
+    assert "'Clear' in step 4" in app
+    html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+    links = re.findall(r"<a data-v=\"[a-z_]+\"[^>]*>", html)
+    assert links and all('href="#"' in a for a in links)
+    assert "e.preventDefault(); go(a.dataset.v);" in app

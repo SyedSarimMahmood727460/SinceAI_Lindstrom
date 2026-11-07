@@ -116,7 +116,7 @@ def test_diy_without_contract(con, tmp_path, monkeypatch):
     rv = build_review(con, ReviewParams(account_id="CUST001"))
     assert rv.dto.net is None and rv.growth is None
     text = _pdf_text(build_pdf(rv, tmp_path / "d.pdf"))
-    assert f"Doing it yourself would cost about {fmt_compact_value(rv.dto.diy_total)} a year" in text
+    assert f"Doing it yourself would cost about {fmt_compact_value(rv.dto.diy_total)} per year" in text
     assert "Enter the contract price" not in text
     assert "Grow together" not in text
     wb = load_workbook(build_xlsx(rv, tmp_path / "d.xlsx"))
@@ -281,3 +281,51 @@ def test_pdf_has_no_coaching(pdf, review, growth_review, tmp_path):
         for c in rv.story:
             assert " ".join(c["what_to_say"].split())[:50] not in text, c["id"]
         assert "Points we suggest discussing" in text
+
+
+def _step2_text(step):
+    return " ".join([step["message"], step.get("lines_header", ""), step["bars_title"],
+                     *(f"{t['label']} {t['context']}" for t in step["tiles"])])
+
+
+@pytest.mark.parametrize("contract", [False, True])
+def test_step2_quarter_is_not_called_a_year(con, tmp_path, monkeypatch, contract):
+    """A quarter's figures say 'in 2025-Q3', never 'a year' / 'per year' (step 2, all three formats)."""
+    from export.sections import meeting_steps
+    monkeypatch.setenv("VR_INPUTS_DIR", str(tmp_path / "inputs"))
+    if contract:
+        save_inputs("CUST001", {"contract_price_eur_per_year": 300000}, SPEC)
+    rv = build_review(con, ReviewParams(account_id="CUST001", period="2025-Q3"))
+    step = meeting_steps(rv)[1]
+    text = _step2_text(step)
+    assert "2025-Q3" in text and "per year" not in text.lower() and "a year" not in text
+    assert step["lines_header"] == "In 2025-Q3"
+    assert (step["tiles"][0]["label"] in ("Saving with Lindström", "Extra cost with Lindström")) == contract
+    deck = Presentation(str(build_pptx(rv, tmp_path / "q.pptx")))
+    slide = next(s for s in deck.slides if any(sh.has_text_frame and sh.text_frame.text.startswith("2 · Vs doing")
+                                                for sh in s.shapes))
+    parts = [sh.text_frame.text for sh in slide.shapes if sh.has_text_frame]
+    parts += [c.text_frame.text for sh in slide.shapes if getattr(sh, "has_table", False) and sh.has_table
+              for row in sh.table.rows for c in row.cells]
+    slide_text = "\n".join(parts)
+    assert "2025-Q3" in slide_text and "per year" not in slide_text.lower()
+    pdf = _pdf_text(build_pdf(rv, tmp_path / "q.pdf"))
+    step2 = pdf.split("2 · Vs doing it yourself")[1].split("3 · Where to improve")[0]
+    assert "2025-Q3" in step2 and "per year" not in step2.lower()
+    # the full year keeps "per year"
+    assert "per year" in _step2_text(meeting_steps(build_review(con, ReviewParams(account_id="CUST001")))[1])
+
+
+def test_xlsx_customer_has_no_coaching(con, tmp_path):
+    """The customer workbook drops the account manager's "What to say" columns (Meeting and Story)."""
+    rv = build_review(con, ReviewParams(account_id="CUST001", audience="customer"))
+    wb = load_workbook(build_xlsx(rv, tmp_path / "c.xlsx", audience="customer"))
+    assert [c.value for c in wb["Meeting"][1]] == ["Step", "Message", "Figures"]
+    assert [c.value for c in wb["Story"][1]] == ["Topic", "Statement", "Relatable comparison"]
+    cells = " ".join(str(c.value) for ws in (wb["Meeting"], wb["Story"]) for row in ws.iter_rows() for c in row if c.value)
+    for card in rv.story:
+        if card.get("what_to_say"):
+            assert card["what_to_say"] not in cells
+    kam = load_workbook(build_xlsx(rv, tmp_path / "k.xlsx"))
+    assert [c.value for c in kam["Meeting"][1]][-1] == "What to say (account manager)"
+    assert [c.value for c in kam["Story"][1]][-1] == "What to say"
