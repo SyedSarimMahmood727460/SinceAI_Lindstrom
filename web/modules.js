@@ -890,7 +890,7 @@ const Components = {
   // ---- Account intelligence (design §8b G8): POST /intel; no engine numbers are mixed in ----
   intel_page(ctx) {
     const I = ctx.ext.intel, name = ctx.R.meta.node.name;
-    if (ctx.S.audience === 'customer') return {html: '<div class="card empty">Account intelligence is a preparation tool for the account manager. Switch the audience to KAM in Settings to use it.</div>'};
+    if (ctx.S.audience === 'customer') return {html: '<div class="card empty">Customer background is a preparation tool for the account manager. Switch the audience to KAM in Settings to use it.</div>'};
     const snaps = (I.snapshots || []).map(s => `<button type="button" class="chip ${I.report && I.report.company === s.company ? 'on' : ''}" data-intel-snap="${esc(s.company)}">${esc(s.company)} · snapshot ${esc(s.generated_at)}</button>`).join('');
     const warn = I.liveResearch === false ? `<div class="alert"><div class="t">Live research is off: no Anthropic API key</div>
       <div>No Claude API key is set on this server, so this page shows a saved snapshot of public research made earlier with Claude, not a fresh search. Check the date on the snapshot before you use it. To turn live research on, set <code>ANTHROPIC_API_KEY</code> and make sure <code>VR_AI</code> is not <code>off</code>.</div></div>` : '';

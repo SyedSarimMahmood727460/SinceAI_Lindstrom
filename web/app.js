@@ -15,16 +15,16 @@ const SUGGESTED_PROMPTS = [  // pack sheet Suggested_Prompts
 const PAGES = {
   meeting: null,  // the meeting flow renders its own step titles
   overview: null,  // title built from the review
-  sites: ['Sites & drill-down', ""],
-  footprint: ['Footprint & handprint', "Compared with the selected baseline. Ranges show low–high sensitivity."],
-  circularity: ['Circularity & repairs', ""],
-  steering: ['Steering-committee pack', ""],
-  methodology: ['Methodology & assumptions', "Boundaries, baseline, sources and limitations."],
+  sites: ['Sites', ""],
+  footprint: ['Environmental impact', "Compared with the selected baseline. Ranges show low–high sensitivity."],
+  circularity: ['Circularity', ""],
+  steering: ['Steering pack', ""],
+  methodology: ['Method & assumptions', "Boundaries, baseline, sources and limitations."],
   readiness: ['Data readiness', ""],
-  vs_diy: ['Service vs do-it-yourself', "Do-it-yourself figures are illustrative until you enter the customer's own numbers."],
-  growth: ['Growth opportunities', "Per year, for the whole account."],
-  intel: ['Account intelligence', "Public sources only. Separate from the review figures."],
-  fit: ["Built on Lindström's work", ""],
+  vs_diy: ['Compare alternatives', "Do-it-yourself figures are illustrative until you enter the customer's own numbers."],
+  growth: ['Opportunities', "Per year, for the whole account."],
+  intel: ['Customer background', "Public sources only. Separate from the review figures."],
+  fit: ['How it fits Lindström', ""],
 };
 // Components that show the account's figures; on an empty filter they say "No data for this filter".
 // Growth is account-wide (not filtered); intelligence and the fit page do not use the review figures.
@@ -997,7 +997,7 @@ $('sens').onchange = e => { S.sens = e.target.value; load(); };
 document.querySelectorAll('#aud button').forEach(b => { b.onclick = () => {
   if (S.audience === b.dataset.aud) return;
   S.audience = b.dataset.aud; closeDrawer();
-  if (S.audience === 'customer' && S.view === 'intel') S.view = 'meeting';  // no Account intelligence in the customer view
+  if (S.audience === 'customer' && S.view === 'intel') S.view = 'meeting';  // no Customer background in the customer view
   load();
 }; });
 
