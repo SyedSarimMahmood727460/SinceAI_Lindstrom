@@ -183,7 +183,7 @@ function storyRef(R, id) {
   return map[id] || null;
 }
 
-// ---------- helpers for the DIY, growth, intelligence and fit pages ----------
+// ---------- helpers for the DIY, growth and intelligence pages ----------
 const INPUT_CONTRACT = 'contract_price_eur_per_year';
 /** Results without an /explain endpoint (do-it-yourself, growth): kept here for the local drawer. */
 const LOCAL = {};
@@ -214,7 +214,6 @@ const srcBadge = r => (r.source === 'kam'
   ? `<span class="src kam">entered by account manager${r.entered_at ? `, ${esc(r.entered_at)}` : ''}</span>`
   : `<span class="src">default${r.assumption_id ? ` (${esc(r.assumption_id)})` : ''}</span>`);
 const rawNum = v => (v == null ? '' : String(v));
-const FIT_KIND = {PUBLIC_REFERENCE: ['PUBLIC', 'b-PUBLIC'], DATA_PACK: ['DATA PACK', 'b-DATAPACK'], BRIEF: ['BRIEF', 'b-BRIEF']};
 
 // ---------- guided meeting flow (design §3, §5, §10a) ----------
 // Compact number style, mirrored from export/format.py fmt_compact (vectors in tests/test_format.py).
@@ -926,20 +925,6 @@ const Components = {
     return {html: `${note}<div class="card">${form}</div><div style="margin-top:12px">${body}</div>`};
   },
 
-  // ---- Built on Lindström's work (design §3): config/lindstrom_fit.yaml ----
-  fit_page(ctx) {
-    const F = ctx.ext.fit;
-    if (F === undefined) return {html: '<div class="card empty">Loading…</div>'};
-    if (!F) return {html: '<div class="card empty">Could not load the page content.</div>'};
-    const kind = k => { const [t, c] = FIT_KIND[k] || [k, '']; return `<span class="badge ${c}">${esc(t)}</span>`; };
-    const rows = (F.assets || []).map(a => `<tr><td class="l"><b>${esc(a.asset)}</b></td><td class="l">${esc(a.today)}</td><td class="l">${esc(a.value_review)}</td>
-      <td class="l">${esc(a.brief_line)}</td><td class="l">${kind(a.kind)} ${a.kind === 'PUBLIC_REFERENCE' ? extLink(a.source) : esc(a.source)}</td></tr>`).join('');
-    const brief = (F.brief_map || []).map(b => `<tr><td class="l">${esc(b.asked)}</td><td class="l">${esc(b.where)}</td><td class="l">${b.status === 'done' ? '✅ done' : esc(b.status)}</td></tr>`).join('');
-    return {html: `<div class="alert small">ℹ ${esc(F.note)}</div>
-      <div class="card"><h2>Lindström assets → how Value Review uses or extends them</h2><table class="fit"><tr><th class="l">Lindström asset</th><th class="l">What Lindström has today</th>
-        <th class="l">How Value Review uses or extends it</th><th class="l">Brief line answered</th><th class="l">Source</th></tr>${rows}</table></div>
-      <div class="card" style="margin-top:12px"><h2>What you asked → where it is</h2><table><tr><th class="l">What you asked</th><th class="l">Where it is</th><th class="l">Status</th></tr>${brief}</table></div>`};
-  },
 };
 
 /** Simple mode drops the z-score the engine appends to a finding, e.g. " (z = -1.5)". */

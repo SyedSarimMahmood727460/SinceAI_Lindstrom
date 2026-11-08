@@ -445,3 +445,5 @@ table.inputs td input[type=text]{box-sizing:border-box;width:88px;min-height:36p
 table.inputs td:nth-child(2) input{font-weight:600}
 table.inputs td.l:nth-child(5){white-space:nowrap;color:var(--secondary)}
 table.inputs td.l:nth-child(6){min-width:140px;line-height:1.35}
+
+.lead-help{max-width:760px;line-height:1.55}

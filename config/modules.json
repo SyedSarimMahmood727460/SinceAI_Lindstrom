@@ -75,8 +75,6 @@
   {"id": "intel_research", "pack": "general", "page": "intel", "component": "intel_page",
    "required_metrics": [], "priority_tags": [], "industries": ["*"]},
 
-  {"id": "fit_assets", "pack": "general", "page": "fit", "component": "fit_page",
-   "required_metrics": [], "priority_tags": [], "industries": ["*"]},
 
   {"id": "method_boundary", "pack": "general", "page": "methodology", "component": "methodology",
    "required_metrics": [], "priority_tags": [], "industries": ["*"]},

@@ -7,14 +7,14 @@ from config.loader import CONFIG_DIR, load_yaml
 
 PACKS = {"general", "sustainable", "financial"}
 PAGES = {"meeting", "overview", "sites", "footprint", "circularity", "steering", "methodology", "readiness",
-         "vs_diy", "growth", "intel", "fit"}
+         "vs_diy", "growth", "intel"}
 COMPONENTS = {
     "kpi_row", "observations", "site_rank", "site_table", "site_detail", "footprint_cards",
     "footprint_pct_chart", "baseline_compare_chart", "repairs_month_chart", "repairs_type_chart",
     "waste_routes_chart", "exec_summary", "discussion_points", "action_table", "methodology",
     "assumption_table", "data_quality", "readiness_table", "meeting_flow",
     "diy_compare", "diy_cost_chart", "diy_inputs", "growth_inputs", "growth_levers", "intel_page",
-    "fit_page", "trend_charts", "site_compare_chart", "site_scatter", "site_mix", "footprint_by_site",
+    "trend_charts", "site_compare_chart", "site_scatter", "site_mix", "footprint_by_site",
 }
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 
@@ -80,7 +80,7 @@ def test_nav_groups():
     flat = [a or b for a, b in order]
     assert flat == ["meeting", "Before the meeting", "intel",
                     "Detail", "overview", "sites", "vs_diy", "growth", "footprint", "circularity", "steering",
-                    "Trust", "fit", "methodology", "readiness"]
+                    "Trust", "methodology", "readiness"]
     assert re.search(r'<a data-v="intel"[^>]*class="[^"]*kam-only', nav)
     assert re.search(r'<div class="sub[^"]*kam-only[^"]*">Before the meeting', nav)
 

@@ -15,21 +15,20 @@ const SUGGESTED_PROMPTS = [  // pack sheet Suggested_Prompts
 const PAGES = {
   meeting: null,  // the meeting flow renders its own step titles
   overview: null,  // title built from the review
-  sites: ['Sites', ""],
-  footprint: ['Environmental impact', "Compared with the selected baseline. Ranges show low–high sensitivity."],
-  circularity: ['Circularity', ""],
-  steering: ['Steering pack', ""],
-  methodology: ['Method & assumptions', "Boundaries, baseline, sources and limitations."],
-  readiness: ['Data readiness', ""],
-  vs_diy: ['Compare alternatives', "Do-it-yourself figures are illustrative until you enter the customer's own numbers."],
-  growth: ['Opportunities', "Per year, for the whole account."],
-  intel: ['Company insights', "Public sources only. Separate from the review figures."],
-  fit: ['How it fits Lindström', ""],
+  sites: ['Sites', "All delivery sites of this customer side by side.\nSort a column, or click a site to see its detail."],
+  footprint: ['Environmental impact', "Water, CO₂e and energy saved, compared with the selected baseline.\nCheck the ranges. Pick another baseline above if it fits better."],
+  circularity: ['Circularity', "Repairs, reuse and recycling that keep garments in use longer.\nSee which repairs are most common and where the waste goes."],
+  steering: ['Steering pack', "Discussion points for the annual review, written from the findings.\nRead them, edit them, then export the pack."],
+  methodology: ['Method & assumptions', "How the numbers are made: baseline, sources, assumptions and limits.\nCheck this before you quote a figure to the customer."],
+  readiness: ['Data readiness', "Data problems found, and the real data needed later.\nUse it to plan which sources to connect next."],
+  vs_diy: ['Compare alternatives', "What running the same textile service yourself would cost, against Lindström.\nEnter your own prices below, or the illustrative defaults are used."],
+  growth: ['Opportunities', "Extra savings if the customer adds sites, employees or services. Per year.\nEnter a scenario below to see the effect."],
+  intel: ['Company insights', "Public facts about a company: where it is heading and how Lindström can help.\nType a company name and press Research. Sources only, no review figures."],
 };
 // Components that show the account's figures; on an empty filter they say "No data for this filter".
-// Growth is account-wide (not filtered); intelligence and the fit page do not use the review figures.
+// Growth is account-wide (not filtered); intelligence does not use the review figures.
 const STATIC_COMPONENTS = new Set(['meeting_flow', 'methodology', 'assumption_table', 'data_quality', 'readiness_table', 'discussion_points',
-  'growth_inputs', 'growth_levers', 'intel_page', 'fit_page']);
+  'growth_inputs', 'growth_levers', 'intel_page']);
 const SOURCE_LABEL = {prompt: 'from your prompt', chips: 'your selection', customer: "customer's stated priorities + industry default",
   industry: 'industry default'};
 
@@ -41,10 +40,10 @@ const S = {account: null, period: '2025', product: '', serviceLine: '', baseline
 const hashStep = () => { const m = /^#meeting\/([1-5])$/.exec(location.hash); return m ? +m[1] : null; };
 if (hashStep()) S.step = hashStep();
 let R = null, siteReview = null, MODULES = [], ACCOUNTS = [], INTERNAL = [], ASSUMPTIONS = {};
-// State for the DIY, growth, intelligence and fit pages (passed to the components as ctx.ext).
+// State for the DIY, growth and intelligence pages (passed to the components as ctx.ext).
 const GROWTH_SENT = {};  // account -> growth inputs last saved in this session (kept when review.growth is null)
 const EXT = {
-  spec: {}, catalogue: null, fit: undefined, storedGrowth: {},
+  spec: {}, catalogue: null, storedGrowth: {},
   intel: {company: 'Fazer Group', website: '', report: null, error: '', loading: false, snapshots: [], auto: false},
   growthStored: () => growthStored(),
 };
@@ -227,7 +226,7 @@ function pageHead() {
       `${filterText()}</p>`;
   }
   const [t, l] = PAGES[S.view];
-  return `<h1>${esc(t)}</h1>${l ? `<p class="lead">${VR.gloss(l)}</p>` : ''}`;
+  return `<h1>${esc(t)}</h1>${l ? `<p class="lead lead-help">${VR.gloss(l).split('\n').join('<br>')}</p>` : ''}`;
 }
 
 function renderPage() {
@@ -380,15 +379,10 @@ function catalogue() {
   return catLoad;
 }
 
-// ---------- DIY, growth, intelligence and fit pages ----------
-/** Load what a page needs once (fit content, service catalogue, intel snapshots), then re-render. */
+// ---------- DIY, growth and intelligence pages ----------
+/** Load what a page needs once (service catalogue, intel snapshots), then re-render. */
 function ensurePageData(view) {
   const rerender = () => { if (S.view === view) renderPageKeepFocus(); };
-  if (view === 'fit' && EXT.fit === undefined && !EXT.fitLoading) {
-    EXT.fitLoading = true;
-    getJSON('/config/fit').then(f => { EXT.fit = f; }).catch(e => { EXT.fit = null; toast(`Could not load the page (${e.message})`, true); })
-      .finally(() => { EXT.fitLoading = false; rerender(); });
-  }
   if ((view === 'growth' || view === 'intel' || view === 'meeting') && EXT.catalogue === null && !catLoad) catalogue().then(rerender);
   if (view === 'intel' && !EXT.intel.auto && S.audience === 'kam') {
     // first visit: list the snapshots and open the example company (Fazer Group) straight away

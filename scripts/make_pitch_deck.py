@@ -240,8 +240,8 @@ def _s2_fit(prs, d, n):
               "(same modules and packs), eLindström (we propose this as a portal module), RFID "
               "tracking (utilisation and on-time), the Tableau reports (one adapter per report), the "
               "WWS laundry calculator (per-kg allocation), the Sustainability Report (context only), "
-              "repairs, and your data-pack assumptions A001–A008 used verbatim. The same table is the "
-              "in-app page 'Built on Lindström's work', with the source link for every public fact.\n"
+              "repairs, and your data-pack assumptions A001–A008 used verbatim. "
+              "Every public fact is listed below with its source link.\n"
               + "\n".join(f"- {a['asset']}: {a['source']}" for a in assets))
 
 
