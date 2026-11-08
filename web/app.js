@@ -1,4 +1,4 @@
-/* Value Review dashboard: state, API calls and page rendering. Numbers come only from the API. */
+/* Threadline dashboard: state, API calls and page rendering. Numbers come only from the API. */
 (() => {
 'use strict';
 

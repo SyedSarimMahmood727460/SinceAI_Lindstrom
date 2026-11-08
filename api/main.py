@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI):
     state.con.close()
 
 
-app = FastAPI(title="Value Review", lifespan=lifespan, default_response_class=UTF8JSONResponse)
+app = FastAPI(title="Threadline", lifespan=lifespan, default_response_class=UTF8JSONResponse)
 
 
 def _account_exists(account_id: str) -> bool:

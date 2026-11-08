@@ -6,13 +6,17 @@ from pptx.util import Pt
 
 from api.build import build_review
 from api.review_model import ReviewParams
-from export.format import fmt_compact_range, fmt_compact_value, fmt_value
+from export.format import fmt_compact_range, fmt_compact_value, fmt_range, fmt_value
 from model.inputs_store import inputs_dir
 
 TITLES = [
     "What you asked",
     "Built on Lindström's work",
     "Easy to explain: a guided customer meeting",
+    "The dashboard at a glance",
+    "The customer's numbers, with ranges",
+    "Savings by site, and where to look",
+    "Month by month",
     "Save more by working with us more",
     "Knows where your customers are going",
     "Credible by design",
@@ -55,7 +59,7 @@ def test_pitch_deck(tmp_path, con, pack_path):
     assert (sorted(inputs_dir().glob("*")) if inputs_dir().exists() else []) == stored
     prs = Presentation(out)
     slides = list(prs.slides)
-    assert len(slides) == 8
+    assert len(slides) == 12
     assert abs(prs.slide_width / prs.slide_height - 16 / 9) < 1e-3  # 16:9
     for slide, title in zip(slides, TITLES):
         texts = _texts(slide)
@@ -76,10 +80,22 @@ def test_pitch_deck(tmp_path, con, pack_path):
     for step in ("1 · What you got", "2 · Vs doing it yourself", "3 · Where to improve",
                  "4 · Grow together", "5 · Agree next steps"):
         assert step in story
-    assert fmt_value(r.dto.diy_total) in " ".join(_texts(slides[3]))
+    assert fmt_value(r.dto.diy_total) in " ".join(_texts(slides[7]))
     # slide 5 cites the committed Fazer snapshot; slide 6 names the L003 warning
-    intel = " ".join(_texts(slides[4]))
+    intel = " ".join(_texts(slides[8]))
     assert "Fazer Group" in intel and "cision.com" in intel
-    assert "L003" in " ".join(_texts(slides[5]))
-    assert "Baltic Harbour Hotels" in " ".join(_texts(slides[6]))
+    assert "L003" in " ".join(_texts(slides[9]))
+    assert "Baltic Harbour Hotels" in " ".join(_texts(slides[10]))
 
+
+    # pictures, graphs and tables: screenshots, charts and engine figures in tables
+    def pictures(slide):
+        return [sh for sh in slide.shapes if sh.shape_type == 13]
+
+    assert len(pictures(slides[3])) == 1  # a real screenshot of the app
+    assert len(pictures(slides[4])) == 1 and any(sh.has_table for sh in slides[4].shapes)
+    assert len(pictures(slides[5])) == 1 and any(sh.has_table for sh in slides[5].shapes)
+    assert len(pictures(slides[6])) == 2  # the two monthly charts
+    numbers = " ".join(_texts(slides[4]))
+    for mid in ("water_saving_l", "co2_saving_kg", "energy_saving_kwh"):
+        assert fmt_value(k[mid]).replace("CO2e", "CO₂e") in numbers and fmt_range(k[mid]).replace("CO2e", "CO₂e") in numbers

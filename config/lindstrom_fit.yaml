@@ -2,7 +2,7 @@
 # kind: PUBLIC_REFERENCE (public Lindström source, link required), DATA_PACK (challenge
 # materials / data pack), BRIEF (the challenge brief). Public facts are context only.
 note: >-
-  Public facts are context only — never calculation inputs. Every figure in Value Review is
+  Public facts are context only — never calculation inputs. Every figure in Threadline is
   computed by the engine from the synthetic data pack.
 assets:
   - asset: Managerial dashboard mockups (inspiration deck)
@@ -60,16 +60,16 @@ assets:
     source: "Lindstrom_SinceAI_2026_Challenge_Brief (02.11.2026)"
     kind: BRIEF
 brief_map:
-  - {asked: "Customer-level managerial view with site drill-down", where: "Overview · Sites & drill-down", status: done}
+  - {asked: "Customer-level managerial view with site drill-down", where: "Overview · Sites", status: done}
   - {asked: "Period, baseline and product filters", where: "Toolbar: period, product, service line, baseline, sensitivity", status: done}
-  - {asked: "Personalised by customer priorities or a prompt (≥ 2 priorities, ≥ 2 industries)", where: "Priority chips · prompt box · industry rules", status: done}
+  - {asked: "Personalised by customer priorities or a prompt (≥ 2 priorities, ≥ 2 industries)", where: "Focus panel: priority chips and prompt · industry rules", status: done}
   - {asked: "At least 3 observations or recommendations with evidence", where: "Overview · What matters for this customer", status: done}
-  - {asked: "Steering-committee discussion points and actions", where: "Steering committee", status: done}
+  - {asked: "Steering-committee discussion points and actions", where: "Steering pack", status: done}
   - {asked: "Customer-ready review export", where: "Export: PowerPoint, PDF, Excel", status: done}
-  - {asked: "Every figure shows how it is derived: baseline, assumptions, low/base/high range", where: "Click any tile · Methodology & assumptions", status: done}
-  - {asked: "Methodology and data-readiness notes", where: "Methodology & assumptions · Data readiness · docs/", status: done}
+  - {asked: "Every figure shows how it is derived: baseline, assumptions, low/base/high range", where: "Click any tile · Method & assumptions", status: done}
+  - {asked: "Methodology and data-readiness notes", where: "Method & assumptions · Data readiness · docs/", status: done}
   - {asked: "A credible path to approved sources, more industries, countries and service lines", where: "Data readiness · extension pack (Baltic Harbour Hotels, Mats, Estonia)", status: done}
-  - {asked: "Value versus doing it yourself: cost, convenience and environment", where: "Service vs do-it-yourself", status: done}
-  - {asked: "Show customers they can save more by working with Lindström more", where: "Growth opportunities", status: done}
-  - {asked: "Know where customer companies are going and how Lindström can help", where: "Account intelligence", status: done}
-  - {asked: "Easy to understand and explain for account managers", where: "Customer story · Simple/Expert detail · glossary", status: done}
+  - {asked: "Value versus doing it yourself: cost, convenience and environment", where: "Compare alternatives", status: done}
+  - {asked: "Show customers they can save more by working with Lindström more", where: "Opportunities", status: done}
+  - {asked: "Know where customer companies are going and how Lindström can help", where: "Company insights", status: done}
+  - {asked: "Easy to understand and explain for account managers", where: "Review meeting · Simple and Expert views · glossary", status: done}
