@@ -436,3 +436,12 @@ main{overflow-x:clip}
 main{max-width:none}
 main.busy::before{position:fixed;top:50%;left:calc(50% + var(--nav-w,230px) / 2);margin:-17px 0 0 -17px}
 @media (max-width:839px){main.busy::before{left:50%}}
+
+/* "Your numbers": headers sit exactly over their inputs; every input is the same width */
+table.inputs{width:100%;border-collapse:collapse}
+table.inputs th,table.inputs td{padding:8px 6px;text-align:left;vertical-align:middle}
+table.inputs th:first-child,table.inputs td:first-child{padding-left:0;min-width:200px}
+table.inputs td input[type=text]{box-sizing:border-box;width:88px;min-height:36px;padding:0 10px;text-align:left}
+table.inputs td:nth-child(2) input{font-weight:600}
+table.inputs td.l:nth-child(5){white-space:nowrap;color:var(--secondary)}
+table.inputs td.l:nth-child(6){min-width:140px;line-height:1.35}

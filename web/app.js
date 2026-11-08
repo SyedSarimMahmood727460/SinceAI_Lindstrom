@@ -23,7 +23,7 @@ const PAGES = {
   readiness: ['Data readiness', ""],
   vs_diy: ['Compare alternatives', "Do-it-yourself figures are illustrative until you enter the customer's own numbers."],
   growth: ['Opportunities', "Per year, for the whole account."],
-  intel: ['Customer background', "Public sources only. Separate from the review figures."],
+  intel: ['Company insights', "Public sources only. Separate from the review figures."],
   fit: ['How it fits Lindström', ""],
 };
 // Components that show the account's figures; on an empty filter they say "No data for this filter".
@@ -997,7 +997,7 @@ $('sens').onchange = e => { S.sens = e.target.value; load(); };
 document.querySelectorAll('#aud button').forEach(b => { b.onclick = () => {
   if (S.audience === b.dataset.aud) return;
   S.audience = b.dataset.aud; closeDrawer();
-  if (S.audience === 'customer' && S.view === 'intel') S.view = 'meeting';  // no Customer background in the customer view
+  if (S.audience === 'customer' && S.view === 'intel') S.view = 'meeting';  // no Company insights in the customer view
   load();
 }; });
 
