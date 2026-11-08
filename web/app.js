@@ -158,7 +158,7 @@ function renderMode() {
 }
 
 /** The Settings button shows a dot when any setting in the popover differs from its default;
- * the Ask button shows one while a stated priority tailors the view. */
+ * the Focus button shows one while a stated priority tailors the view. */
 const SETTING_DEFAULTS = {product: '', serviceLine: '', sens: 'base', audience: 'kam', mode: 'simple'};
 function renderSettingsDot() {
   const changed = Object.entries(SETTING_DEFAULTS).some(([k, v]) => S[k] !== v);
@@ -793,7 +793,7 @@ async function runPrompt(text) {
   if (R) { askPanel(false); $('askBtn').focus(); }  // the prompt is applied: the panel steps aside
 }
 
-// ---------- Settings popover and Ask panel ----------
+// ---------- Settings popover and Focus panel ----------
 /** Open, close (`on` false) or toggle (`on` undefined) a header panel; opening one closes the other. */
 function headerPanel(btnId, panelId, on, focusSel) {
   const p = $(panelId), open = on == null ? p.hidden : on;

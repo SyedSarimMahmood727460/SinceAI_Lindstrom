@@ -6,7 +6,7 @@ Say once, early: "Everything you will see is synthetic data and not audited. The
 
 The three things we want you to remember: **an account manager can run a customer meeting with it**, **we built on your work and your ask**, and **it grows with your business without code changes**.
 
-Layout in one breath: the header holds Customer, Period, Compare with, then **Ask**, **Settings** and **Export**. The left navigation is **Meeting** · **Before the meeting** (KAM only) · **Detail** · **Trust**. The Meeting has five steps, each with a message, two or three big numbers, a range on a second line, and a **What to say** box with Copy. Use the step buttons, Back/Next, or the left and right arrow keys.
+Layout in one breath: the header holds Customer, Period, Compare with, then **Focus**, **Settings** and **Export**. The left navigation is **Meeting** · **Before the meeting** (KAM only) · **Detail** · **Trust**. The Meeting has five steps, each with a message, two or three big numbers, a range on a second line, and a **What to say** box with Copy. Use the step buttons, Back/Next, or the left and right arrow keys.
 
 | Time | Step | Click | Say |
 |---|---|---|---|
