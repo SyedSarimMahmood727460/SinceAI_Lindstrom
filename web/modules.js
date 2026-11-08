@@ -422,8 +422,8 @@ const Components = {
     const step = visible.includes(ctx.S.step) ? ctx.S.step : visible[0];
     const i = visible.indexOf(step), prev = visible[i - 1], next = visible[i + 1];
     const name = n => MEET_STEPS.find(s => s[0] === n)[1];
-    const bar = MEET_STEPS.filter(([n]) => visible.includes(n)).map(([n, t, sub]) =>
-      `<button type="button" class="mstep ${n === step ? 'on' : ''}" data-step="${n}" ${n === step ? 'aria-current="step"' : ''}><b>${n} · ${esc(t)}</b><span>${esc(sub)}</span></button>`).join('');
+    const bar = MEET_STEPS.filter(([n]) => visible.includes(n)).map(([n, t]) =>
+      `<button type="button" class="mstep ${n === step ? 'on' : ''}" data-step="${n}" ${n === step ? 'aria-current="step"' : ''}><b>${n} · ${esc(t)}</b></button>`).join('');
     const s = MEET[step](ctx);
     const nav = `<div class="mnav">${prev ? `<button type="button" class="btn ghost" data-step="${prev}">◀ Back</button>` : '<span></span>'}
       <span class="small mfoot">${esc(MEET_FOOT)}</span>
@@ -495,6 +495,90 @@ const Components = {
         <td style="width:40%"><div class="bar"><i style="width:${Math.abs(m.value) / mx * 100}%"></i></div></td><td>${esc(fmtM(m))}</td></tr>`; }).join('');
     return {cls: 'w5', html: `<div class="card"><h2>Sites ranked by ${esc(r.l)}</h2><table>${tr}</table>
       <div class="small" style="margin-top:6px">Showing ${Math.min(10, rows.length)} of ${rows.length}. Open <button type="button" class="link" data-go="sites">Sites</button> for all.</div></div>`};
+  },
+
+  trend_charts(ctx) {
+    const tr = ctx.R.trends || {};
+    const base = tr.active_wearers || tr.garments_allocated || tr.repairs || [];
+    if (!base.length) return null;
+    const months = base.map(p => p.month), ser = k => (tr[k] || []).map(p => p.value);
+    return {charts: [
+      {id: 'chTrendA', type: 'line', data: {labels: months, datasets: [
+        {label: 'Allocated pieces', data: ser('garments_allocated'), borderColor: COLORS.navy, backgroundColor: COLORS.navy},
+        {label: 'Scanned in use', data: ser('active_assets_scanned'), borderColor: COLORS.teal, backgroundColor: COLORS.teal},
+        {label: 'Wearers (de-duplicated)', data: ser('active_wearers'), borderColor: COLORS.grey, backgroundColor: COLORS.grey, borderDash: [4, 4]}]},
+        options: {scales: {y: {beginAtZero: true}}}},
+      {id: 'chTrendB', type: 'bar', data: {labels: months, datasets: [
+        {label: 'Repairs', data: ser('repairs'), backgroundColor: COLORS.blue},
+        {label: 'Service requests', data: ser('service_requests'), backgroundColor: COLORS.orange},
+        {label: 'Late cycles', data: ser('late_cycles'), backgroundColor: COLORS.slate}]},
+        options: {scales: {y: {beginAtZero: true}}}}],
+      html: `<div class="card"><h2>Month by month</h2><p class="small" style="margin-top:-6px">Account totals for each month of the year, all sites together.</p>
+        <div class="grid c2"><div>${chart('chTrendA', 'sm')}</div><div>${chart('chTrendB', 'sm')}</div></div></div>`};
+  },
+
+  site_compare_chart(ctx) {
+    const OPTS = ['washed_kg_per_wearer', 'utilisation', 'service_requests_per_100w', 'repairs_per_100w', 'on_time_rate', 'co2_saving_kg'];
+    const have = OPTS.filter(k => ctx.R.sites.some(s => s.metrics[k] && s.metrics[k].value != null));
+    if (!have.length || ctx.R.sites.length < 2) return null;
+    const k = have.includes(ctx.S.cmetric) ? ctx.S.cmetric : have[0];
+    const rows = ctx.R.sites.filter(s => s.metrics[k] && s.metrics[k].value != null).sort((a, b) => b.metrics[k].value - a.metrics[k].value);
+    const label = rows[0].metrics[k].label, prefix = ctx.R.meta.node.name.split(' ')[0] + ' ';
+    const pct = rows[0].metrics[k].unit === 'ratio';
+    const chips = have.map(id => { const mm = ctx.R.sites.map(s => s.metrics[id]).find(Boolean);
+      return `<button type="button" class="chip${id === k ? ' on' : ''}" data-cmetric="${esc(id)}" aria-pressed="${id === k}">${esc(mm ? mm.label : id)}</button>`; }).join('');
+    return {charts: [{id: 'chSiteCmp', type: 'bar', data: {labels: rows.map(s => s.name.replace(prefix, '')),
+        datasets: [{label, data: rows.map(s => pct ? s.metrics[k].value * 100 : s.metrics[k].value), backgroundColor: COLORS.blue}]},
+      options: {indexAxis: 'y', plugins: {legend: {display: false}, tooltip: {callbacks: {label: c => ' ' + fmtM(rows[c.dataIndex].metrics[k])}}},
+        scales: {x: {beginAtZero: true}}}}],
+      html: `<div class="card"><h2>Compare sites</h2><div class="chips" role="group" aria-label="Metric to compare">${chips}</div>
+        <div class="chart" style="height:${Math.max(220, rows.length * 22 + 50)}px"><canvas id="chSiteCmp"></canvas></div>
+        <p class="small">${esc(label)} for each site, highest first. Click a site in the table below to open it.</p></div>`};
+  },
+
+  site_scatter(ctx) {
+    const X = 'utilisation', Y = 'service_requests_per_100w';
+    const pts = ctx.R.sites.filter(s => s.metrics[X] && s.metrics[X].value != null && s.metrics[Y] && s.metrics[Y].value != null);
+    if (pts.length < 3) return null;
+    const prefix = ctx.R.meta.node.name.split(' ')[0] + ' ';
+    const pct = pts[0].metrics[X].unit === 'ratio';
+    const maxW = Math.max(...pts.map(s => (s.metrics.active_wearers || {}).value || 0), 1);
+    const data = pts.map(s => ({x: pct ? s.metrics[X].value * 100 : s.metrics[X].value, y: s.metrics[Y].value,
+      r: 4 + 9 * Math.sqrt(((s.metrics.active_wearers || {}).value || 0) / maxW), name: s.name.replace(prefix, '')}));
+    return {charts: [{id: 'chScatter', type: 'bubble', data: {datasets: [{label: 'Sites', data, backgroundColor: COLORS.blue + 'b3', borderColor: COLORS.blue}]},
+      options: {plugins: {legend: {display: false}, tooltip: {callbacks: {label: c => ` ${c.raw.name}: ${num(c.raw.x, 1)}${pct ? '%' : ''} used, ${num(c.raw.y, 1)} requests per 100 wearers`}}},
+        scales: {x: {title: {display: true, text: pts[0].metrics[X].label + (pct ? ' (%)' : '')}}, y: {beginAtZero: true, title: {display: true, text: pts[0].metrics[Y].label}}}}}],
+      html: `<div class="card"><h2>Use against service requests</h2>${chart('chScatter')}
+        <p class="small">Each bubble is a site; bigger means more wearers. Sites high and to the left are used least and ask for the most service.</p></div>`};
+  },
+
+  site_mix(ctx) {
+    const sites = ctx.R.sites.filter(s => s.metrics.active_wearers && s.metrics.active_wearers.value > 0);
+    if (sites.length < 2) return null;
+    const sum = key => { const o = {}; sites.forEach(s => { o[s[key] || 'Other'] = (o[s[key] || 'Other'] || 0) + s.metrics.active_wearers.value; });
+      return Object.entries(o).sort((a, b) => b[1] - a[1]); };
+    const pal = [COLORS.navy, COLORS.teal, COLORS.blue, COLORS.orange, COLORS.slate, COLORS.grey, COLORS.red];
+    const mk = (id, key) => { const e = sum(key);
+      return {id, type: 'doughnut', data: {labels: e.map(x => x[0]), datasets: [{data: e.map(x => x[1]), backgroundColor: e.map((_, i) => pal[i % pal.length]), borderWidth: 0}]},
+        options: {cutout: '62%'}}; };
+    return {charts: [mk('chMixC', 'country'), mk('chMixT', 'site_type')],
+      html: `<div class="card"><h2>Where the wearers are</h2><div class="grid c2">
+        <div><div class="small" style="text-align:center">By country</div>${chart('chMixC', 'sm')}</div>
+        <div><div class="small" style="text-align:center">By site type</div>${chart('chMixT', 'sm')}</div></div></div>`};
+  },
+
+  footprint_by_site(ctx) {
+    const sites = ctx.R.sites.filter(s => s.metrics.water_saving_l && s.metrics.water_saving_l.value != null && s.metrics.co2_saving_kg && s.metrics.co2_saving_kg.value != null);
+    if (sites.length < 2) return null;
+    const prefix = ctx.R.meta.node.name.split(' ')[0] + ' ';
+    const rows = [...sites].sort((a, b) => b.metrics.co2_saving_kg.value - a.metrics.co2_saving_kg.value);
+    const h = Math.max(220, rows.length * 22 + 60), names = rows.map(s => s.name.replace(prefix, ''));
+    const one = (id, k, div, label, color) => ({id, type: 'bar', data: {labels: names, datasets: [{label, data: rows.map(s => s.metrics[k].value / div), backgroundColor: color}]},
+      options: {indexAxis: 'y', plugins: {legend: {display: false}, tooltip: {callbacks: {label: c => ' ' + fmtM(rows[c.dataIndex].metrics[k])}}}, scales: {x: {beginAtZero: true}}}});
+    return {charts: [one('chFpW', 'water_saving_l', 1000, 'Water saved (m³)', COLORS.blue), one('chFpC', 'co2_saving_kg', 1000, 'CO₂e avoided (t)', COLORS.teal)],
+      html: `<div class="card"><h2>Savings by site</h2><p class="small" style="margin-top:-6px">Against the selected baseline. Estimates, not audited figures.</p>
+        <div class="grid c2"><div><div class="small" style="text-align:center">Water saved (m³)</div><div class="chart" style="height:${h}px"><canvas id="chFpW"></canvas></div></div>
+        <div><div class="small" style="text-align:center">CO₂e avoided (t)</div><div class="chart" style="height:${h}px"><canvas id="chFpC"></canvas></div></div></div></div>`};
   },
 
   site_table(ctx) {
@@ -808,7 +892,9 @@ const Components = {
     const I = ctx.ext.intel, name = ctx.R.meta.node.name;
     if (ctx.S.audience === 'customer') return {html: '<div class="card empty">Account intelligence is a preparation tool for the account manager. Switch the audience to KAM in Settings to use it.</div>'};
     const snaps = (I.snapshots || []).map(s => `<button type="button" class="chip ${I.report && I.report.company === s.company ? 'on' : ''}" data-intel-snap="${esc(s.company)}">${esc(s.company)} · snapshot ${esc(s.generated_at)}</button>`).join('');
-    const note = `<div class="note">${esc(name)} is a fictional customer, so there is nothing public to research. Try the example public company${snaps ? ' below' : ''}. In production the account's legal name would come from the CRM.</div>`;
+    const warn = I.liveResearch === false ? `<div class="alert"><div class="t">Live research is off: no Anthropic API key</div>
+      <div>No Claude API key is set on this server, so this page shows a saved snapshot of public research made earlier with Claude, not a fresh search. Check the date on the snapshot before you use it. To turn live research on, set <code>ANTHROPIC_API_KEY</code> and make sure <code>VR_AI</code> is not <code>off</code>.</div></div>` : '';
+    const note = `${warn}<div class="note">${esc(name)} is a fictional customer, so there is nothing public to research. Try the example public company${snaps ? ' below' : ''}. In production the account's legal name would come from the CRM.</div>`;
     const form = `<form data-form="intel" class="intel-form" novalidate>
       <label class="ctl">Company<input type="text" id="intelCompany" maxlength="200" value="${esc(I.company)}" placeholder="e.g. Fazer Group"></label>
       <label class="ctl">Website (optional)<input type="text" id="intelWebsite" maxlength="300" value="${esc(I.website)}" placeholder="https://…"></label>

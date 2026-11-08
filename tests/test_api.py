@@ -182,3 +182,4 @@ def test_fit_config(client):
     assert public and all(a["source"].startswith(("https://", "http://")) for a in public)
     assert fit["brief_map"] and all({"asked", "where", "status"} <= set(b) for b in fit["brief_map"])
     assert "never calculation inputs" in fit["note"]
+

@@ -14,7 +14,7 @@ COMPONENTS = {
     "waste_routes_chart", "exec_summary", "discussion_points", "action_table", "methodology",
     "assumption_table", "data_quality", "readiness_table", "meeting_flow",
     "diy_compare", "diy_cost_chart", "diy_inputs", "growth_inputs", "growth_levers", "intel_page",
-    "fit_page",
+    "fit_page", "trend_charts", "site_compare_chart", "site_scatter", "site_mix", "footprint_by_site",
 }
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 

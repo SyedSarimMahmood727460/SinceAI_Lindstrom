@@ -15,16 +15,16 @@ const SUGGESTED_PROMPTS = [  // pack sheet Suggested_Prompts
 const PAGES = {
   meeting: null,  // the meeting flow renders its own step titles
   overview: null,  // title built from the review
-  sites: ['Sites & drill-down', 'Customer-level consolidation of the delivery sites. Sort any column, or click a row to drill down.'],
-  footprint: ['Footprint & handprint', "Lindström's allocated service footprint compared with the selected baseline for the same washed kilograms. Ranges show low–high sensitivity."],
-  circularity: ['Circularity & repairs', 'Repairs extend garment life. Textile waste is routed to recycling, reuse or energy recovery.'],
-  steering: ['Steering-committee pack', 'Discussion points generated from the observations. A KAM edits them before the meeting.'],
-  methodology: ['Methodology & assumptions', 'Boundaries, baseline, provenance and limitations. Always one click away and included in the export.'],
-  readiness: ['Data readiness', 'Data-consistency warnings, quarantined rows, and how each prototype field maps to a future approved source.'],
-  vs_diy: ['Service vs do-it-yourself', 'What it would take to run the same textile service yourself, compared with the Lindström service: environment, cost, time and hygiene. The do-it-yourself figures use illustrative defaults until the account manager enters the customer\'s own numbers.'],
-  growth: ['Growth opportunities', 'The extra savings if the customer moves more to Lindström: more sites, more employees on the service, or service lines they do not use yet. Per year, for the whole account.'],
-  intel: ['Account intelligence', 'Where a customer company is going, from recent public sources, and how Lindström can help. Every claim links its source. Separate from the review figures.'],
-  fit: ["Built on Lindström's work", "How Value Review builds on Lindström's existing assets, and where each line of the brief is answered."],
+  sites: ['Sites & drill-down', ""],
+  footprint: ['Footprint & handprint', "Compared with the selected baseline. Ranges show low–high sensitivity."],
+  circularity: ['Circularity & repairs', ""],
+  steering: ['Steering-committee pack', ""],
+  methodology: ['Methodology & assumptions', "Boundaries, baseline, sources and limitations."],
+  readiness: ['Data readiness', ""],
+  vs_diy: ['Service vs do-it-yourself', "Do-it-yourself figures are illustrative until you enter the customer's own numbers."],
+  growth: ['Growth opportunities', "Per year, for the whole account."],
+  intel: ['Account intelligence', "Public sources only. Separate from the review figures."],
+  fit: ["Built on Lindström's work", ""],
 };
 // Components that show the account's figures; on an empty filter they say "No data for this filter".
 // Growth is account-wide (not filtered); intelligence and the fit page do not use the review figures.
@@ -172,17 +172,19 @@ function renderChips() {
   $('pchips').innerHTML = Object.entries(PRI).map(([k, l]) => {
     const i = ap.indexOf(k);
     return `<button type="button" class="chip ${i >= 0 ? 'on' : ''}" data-chip="${k}" aria-pressed="${i >= 0}">${i >= 0 ? `<sup>${i + 1}</sup> ` : ''}${l}</button>`;
-  }).join('') + SUGGESTED_PROMPTS.map(p => `<button type="button" class="chip sugg" data-prompt="${esc(p)}">${esc(p)}</button>`).join('');
+  }).join('');
+  $('psugg').innerHTML = SUGGESTED_PROMPTS.slice(0, 4).map(p => `<button type="button" data-prompt="${esc(p)}">${esc(p)}</button>`).join('');
   if (had) { const b = $('pchips').querySelector(`[data-chip="${had}"]`); if (b) b.focus(); }  // keyboard toggling keeps its place
 }
 
 function renderInterp() {
   const ap = activePri(), src = R.context.priority_source;
   const srcLabel = src === 'industry' || src === 'customer' ? `${SOURCE_LABEL[src]} for ${R.meta.node.industry}` : SOURCE_LABEL[src];
-  $('interp').innerHTML = (S.intentText ? `${esc(S.intentText)} · ` : '') +
-    `Emphasis: <b>${esc(ap.map(p => PRI[p] || p).join(' → ') || 'balanced')}</b> (${esc(srcLabel)}) · ` +
-    `Baseline: <b>${esc(R.meta.baseline.name)}</b> · Sensitivity: <b>${esc(R.meta.sensitivity)}</b>` +
-    (S.audience === 'customer' ? ' · <b>Customer view</b> (internal figures hidden)' : '') +
+  $('interp').innerHTML = `<div class="interp-h">Showing now</div>` +
+    (S.intentText ? `<div>“${esc(S.intentText)}”</div>` : '') +
+    `<div>Focus: <b>${esc(ap.map(p => PRI[p] || p).join(' → ') || 'balanced')}</b> <span class="muted">(${esc(srcLabel)})</span></div>` +
+    `<div>Compared with: <b>${esc(R.meta.baseline.name)}</b> · ${esc(R.meta.sensitivity)} case</div>` +
+    (S.audience === 'customer' ? '<div><b>Customer view</b> (internal figures hidden)</div>' : '') +
     (R.context.industry_note ? `<div class="why">Why this view: ${esc(R.context.industry_note)}</div>` : '');
 }
 
@@ -225,7 +227,7 @@ function pageHead() {
       `${filterText()}</p>`;
   }
   const [t, l] = PAGES[S.view];
-  return `<h1>${esc(t)}</h1><p class="lead">${VR.gloss(l)}</p>`;
+  return `<h1>${esc(t)}</h1>${l ? `<p class="lead">${VR.gloss(l)}</p>` : ''}`;
 }
 
 function renderPage() {
@@ -391,6 +393,7 @@ function ensurePageData(view) {
   if (view === 'intel' && !EXT.intel.auto && S.audience === 'kam') {
     // first visit: list the snapshots and open the example company (Fazer Group) straight away
     EXT.intel.auto = true;
+    getJSON('/ai/status').then(s => { EXT.intel.liveResearch = !!(s && s.live_research); rerender(); }).catch(() => { /* banner stays hidden */ });
     getJSON('/intel/snapshots').then(list => {
       EXT.intel.snapshots = list || [];
       const pre = EXT.intel.snapshots.find(s => s.company === 'Fazer Group') || EXT.intel.snapshots[0];
@@ -844,10 +847,11 @@ function toast(msg, err) {
 function busy(on) { $('loading').classList.toggle('on', on); $('main').classList.toggle('busy', on); }
 
 document.addEventListener('click', e => {
+  if (!e.target.closest('#drawer') && e.target.isConnected && $('drawer').classList.contains('open')) closeDrawer();
   if (!e.target.closest('.export')) exportMenu(false);
   if (!e.target.closest('.pop-wrap') && e.target.isConnected) settingsPanel(false);
   if (!e.target.closest('#askPanel,#askBtn') && e.target.isConnected) askPanel(false);
-  const t = e.target.closest('[data-step],[data-copy-say],[data-copy],[data-copy-growth],[data-detail],[data-mode-set],[data-fmt],[data-local],[data-explain],[data-evidence],[data-site],[data-go],[data-sort],[data-chip],[data-prompt],[data-close-site],[data-action],[data-intel-snap]');
+  const t = e.target.closest('[data-step],[data-cmetric],[data-copy-say],[data-copy],[data-copy-growth],[data-detail],[data-mode-set],[data-fmt],[data-local],[data-explain],[data-evidence],[data-site],[data-go],[data-sort],[data-chip],[data-prompt],[data-close-site],[data-action],[data-intel-snap]');
   if (!t) return;
   const d = t.dataset;
   if (d.step) setStep(+d.step, !!t.closest('.msteps'));
@@ -861,6 +865,7 @@ document.addEventListener('click', e => {
   else if (d.intelSnap) runIntel(d.intelSnap, '', true);
   else if (d.detail != null) goDetail(d.detail);
   else if (d.modeSet) setMode(d.modeSet);
+  else if (d.cmetric) { S.cmetric = d.cmetric; renderPage(); }
   else if (d.fmt) exportReview(d.fmt);
   else if (d.evidence != null) evidence(+d.evidence);
   else if (d.explain) explain(d.explain, d.node);

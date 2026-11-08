@@ -193,6 +193,13 @@ def intel(req: IntelRequest):
         raise HTTPException(503, str(e))
 
 
+@app.get("/ai/status")
+def ai_status():
+    """Which AI features are available right now (no key values are ever returned)."""
+    from ai import llm
+    return {"ai_on": llm.use_llm(), "live_research": llm.use_llm()}
+
+
 @app.get("/intel/snapshots")
 def intel_snapshots():
     from ai.intel import list_snapshots

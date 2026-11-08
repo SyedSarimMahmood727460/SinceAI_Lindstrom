@@ -63,7 +63,7 @@ function toolbar() {
   const add = editing ? `<label class="lay-add">Add widget <select data-lay="add" aria-label="Add widget"><option value="">${lib.length ? 'Choose…' : 'All widgets are shown'}</option>${lib.map(id => `<option value="${esc(id)}">${esc(nice(id))}</option>`).join('')}</select></label>
     <label class="lay-add">Start from <select data-lay="preset" aria-label="Preset view"><option value="">Preset…</option>${Object.entries(PRESETS).map(([k, p]) => `<option value="${k}">${p.label}</option>`).join('')}</select></label>
     <button type="button" class="btn ghost sm" data-lay="reset" ${isCustom(l) ? '' : 'disabled'}>Reset layout</button>` : '';
-  return `<div class="lay-toolbar" role="toolbar" aria-label="Dashboard layout">
+  return `<div class="lay-toolbar${editing ? ' is-editing' : ''}" role="toolbar" aria-label="Dashboard layout">
     <button type="button" class="btn ${editing ? '' : 'ghost'} sm" data-lay="toggle" aria-pressed="${editing}">${editing ? 'Done' : 'Customize'}</button>${add}
     ${editing ? '<span class="small">Drag a widget by its bar, or use ↑ ↓ and the width buttons. Saved in this browser for this customer.</span>'
       : (isCustom(l) ? '<span class="small">Custom layout active</span>' : '')}</div>`;
